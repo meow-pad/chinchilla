@@ -1,10 +1,10 @@
 package service
 
 import (
-	"chinchilla/gateway"
-	"chinchilla/transfer"
 	"context"
 	"errors"
+	"github.com/meow-pad/chinchilla/gateway"
+	"github.com/meow-pad/chinchilla/transfer"
 	"github.com/meow-pad/persian/frame/pboot"
 	"github.com/meow-pad/persian/frame/plog"
 	"github.com/meow-pad/persian/frame/plog/pfield"

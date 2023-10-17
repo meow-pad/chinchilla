@@ -2,9 +2,9 @@ package codec
 
 import (
 	"bytes"
-	"chinchilla/utils/codec"
 	"encoding/binary"
 	"errors"
+	"github.com/meow-pad/chinchilla/utils/codec"
 	"github.com/meow-pad/persian/frame/pnet"
 	"io"
 	"reflect"

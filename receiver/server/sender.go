@@ -1,7 +1,7 @@
 package server
 
 import (
-	"chinchilla/transfer/service"
+	"github.com/meow-pad/chinchilla/transfer/service"
 	"github.com/meow-pad/persian/frame/pnet/tcp/session"
 	"sync"
 	"sync/atomic"

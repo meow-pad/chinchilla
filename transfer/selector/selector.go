@@ -1,8 +1,8 @@
 package selector
 
 import (
-	"chinchilla/transfer/service"
 	"errors"
+	"github.com/meow-pad/chinchilla/transfer/service"
 )
 
 var (

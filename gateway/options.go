@@ -1,8 +1,8 @@
 package gateway
 
 import (
-	"chinchilla/handler"
-	"chinchilla/transfer/selector"
+	"github.com/meow-pad/chinchilla/handler"
+	"github.com/meow-pad/chinchilla/transfer/selector"
 	"github.com/meow-pad/persian/utils/runtime"
 	"github.com/nacos-group/nacos-sdk-go/v2/common/constant"
 	"time"

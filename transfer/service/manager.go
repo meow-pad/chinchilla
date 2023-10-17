@@ -1,10 +1,10 @@
 package service
 
 import (
-	"chinchilla/transfer"
-	"chinchilla/transfer/codec"
-	"chinchilla/transfer/selector"
 	"errors"
+	"github.com/meow-pad/chinchilla/transfer"
+	"github.com/meow-pad/chinchilla/transfer/codec"
+	"github.com/meow-pad/chinchilla/transfer/selector"
 	"github.com/meow-pad/persian/errdef"
 	"github.com/meow-pad/persian/frame/plog"
 	"github.com/meow-pad/persian/frame/plog/pfield"

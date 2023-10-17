@@ -1,7 +1,7 @@
 package selector
 
 import (
-	"chinchilla/transfer/service"
+	"github.com/meow-pad/chinchilla/transfer/service"
 	"math/rand"
 	"sort"
 )

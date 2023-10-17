@@ -1,7 +1,7 @@
 package selector
 
 import (
-	"chinchilla/transfer/service"
+	"github.com/meow-pad/chinchilla/transfer/service"
 	"github.com/meow-pad/persian/frame/plog"
 	"github.com/meow-pad/persian/frame/plog/pfield"
 )

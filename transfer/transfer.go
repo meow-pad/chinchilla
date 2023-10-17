@@ -1,12 +1,12 @@
 package transfer
 
 import (
-	"chinchilla/gateway"
-	"chinchilla/transfer/codec"
-	"chinchilla/transfer/selector"
-	"chinchilla/transfer/service"
 	"context"
 	"encoding/binary"
+	"github.com/meow-pad/chinchilla/gateway"
+	"github.com/meow-pad/chinchilla/transfer/codec"
+	"github.com/meow-pad/chinchilla/transfer/selector"
+	"github.com/meow-pad/chinchilla/transfer/service"
 	"github.com/meow-pad/persian/frame/plog"
 	"github.com/meow-pad/persian/frame/plog/pfield"
 	"github.com/meow-pad/persian/frame/pnet/tcp/session"

@@ -1,9 +1,9 @@
 package service
 
 import (
-	"chinchilla/handler"
 	"context"
 	"fmt"
+	"github.com/meow-pad/chinchilla/handler"
 	"github.com/meow-pad/persian/errdef"
 	"sync/atomic"
 )

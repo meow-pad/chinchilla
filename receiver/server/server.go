@@ -1,11 +1,11 @@
 package server
 
 import (
-	"chinchilla/gateway"
-	"chinchilla/receiver/codec"
-	"chinchilla/transfer"
 	"context"
 	"errors"
+	"github.com/meow-pad/chinchilla/gateway"
+	"github.com/meow-pad/chinchilla/receiver/codec"
+	"github.com/meow-pad/chinchilla/transfer"
 	"github.com/meow-pad/persian/errdef"
 	"github.com/meow-pad/persian/frame/pboot"
 	"github.com/meow-pad/persian/frame/pnet/utils"
