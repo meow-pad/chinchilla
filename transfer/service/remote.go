@@ -86,7 +86,7 @@ func (remoteSrv *Remote) UpdateInfo(srvInst Info) error {
 	if remoteSrv.info.Healthy != oldOne.Healthy || remoteSrv.info.Enable != oldOne.Enable {
 		if !remoteSrv.info.Enable {
 			remoteSrv.state.Store(StateDisabled)
-			remoteSrv.deadline = time.Now().UnixMilli() + remoteSrv.manager.transfer.Gateway.Options.TransferClientDisableTimeout
+			remoteSrv.deadline = time.Now().UnixMilli() + remoteSrv.manager.transfer.Options.TransferClientDisableTimeout
 		} else {
 			if !remoteSrv.info.Healthy {
 				remoteSrv.state.Store(StateDisabled)
@@ -123,7 +123,7 @@ func (remoteSrv *Remote) disable() error {
 	default:
 		remoteSrv.info.Enable = false
 		if state != StateDisabled || remoteSrv.deadline == math.MaxInt64 {
-			remoteSrv.deadline = time.Now().UnixMilli() + remoteSrv.manager.transfer.Gateway.Options.TransferClientDisableTimeout
+			remoteSrv.deadline = time.Now().UnixMilli() + remoteSrv.manager.transfer.Options.TransferClientDisableTimeout
 		}
 		remoteSrv.state.Store(StateDisabled)
 	}
@@ -167,7 +167,7 @@ func (remoteSrv *Remote) connect() error {
 		remoteSrv.reconnectLvl++
 	}
 	// 创建客户端
-	options := remoteSrv.manager.transfer.Gateway.Options
+	options := remoteSrv.manager.transfer.Options
 	clientOpts := []client.Option{
 		client.WithReadBufferCap(options.TransferClientReadBufferCap),
 		client.WithWriteBufferCap(options.TransferClientWriteBufferCap),
@@ -176,7 +176,7 @@ func (remoteSrv *Remote) connect() error {
 		client.WithSocketRecvBuffer(options.TransferClientSocketRecvBuffer),
 		client.WithSocketSendBuffer(options.TransferClientSocketSendBuffer),
 	}
-	cCodec, err := codec.NewMessageCodec(remoteSrv.manager.clientCodec)
+	cCodec, err := codec.NewMessageCodec(remoteSrv.manager.clientCodec, options.TransferMessageWarningSize)
 	if err != nil {
 		return err
 	}
@@ -222,11 +222,11 @@ func (remoteSrv *Remote) handshake() {
 	if remoteSrv.certified.Load() {
 		return
 	}
-	gateway := remoteSrv.manager.transfer.Gateway
-	options := gateway.Options
+	appInfo := remoteSrv.manager.transfer.AppInfo
+	options := remoteSrv.manager.transfer.Options
 	// 发送握手
 	remoteSrv.inner.SendMessage(&codec.HandshakeReq{
-		Id:        gateway.AppInfo.Id(), // 当前服务Id
+		Id:        appInfo.Id(), // 当前服务Id
 		AuthKey:   options.TransferServiceAuthKey,
 		Service:   remoteSrv.info.ServiceName, // 对方服务名
 		ServiceId: remoteSrv.info.InstanceId,  // 对方实例Id

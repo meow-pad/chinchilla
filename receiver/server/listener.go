@@ -1,6 +1,7 @@
 package server
 
 import (
+	"github.com/meow-pad/chinchilla/receiver"
 	"github.com/meow-pad/chinchilla/receiver/codec"
 	tcodec "github.com/meow-pad/chinchilla/transfer/codec"
 	"github.com/meow-pad/persian/frame/plog"
@@ -10,11 +11,15 @@ import (
 	"github.com/meow-pad/persian/utils/worker"
 )
 
-type sListener struct {
-	server *Server
+func NewListener(server *receiver.Receiver) *Listener {
+	return &Listener{server: server}
 }
 
-func (listener *sListener) OnOpened(sess session.Session) {
+type Listener struct {
+	server *receiver.Receiver
+}
+
+func (listener *Listener) OnOpened(sess session.Session) {
 	sessCtx := newSessionContext(listener.server, sess)
 	if err := sess.Register(sessCtx); err != nil {
 		plog.Error("register sess context error:", pfield.Error(err))
@@ -28,34 +33,34 @@ func (listener *sListener) OnOpened(sess session.Session) {
 	}
 }
 
-func (listener *sListener) OnClosed(session session.Session) {
+func (listener *Listener) OnClosed(session session.Session) {
 	listener.server.Transfer.Forward(int64(session.Id()), func(local *worker.GoroutineLocal) {
 		// 移除缓存
 		local.Remove(session.Id())
 	})
 }
 
-func (listener *sListener) OnReceive(sess session.Session, msg any, msgLen int) (err error) {
+func (listener *Listener) OnReceive(sess session.Session, msg any, msgLen int) (err error) {
 	listener.handleMessage(sess, msg)
 	return nil
 }
 
-func (listener *sListener) OnReceiveMulti(sess session.Session, msgArr []any, totalLen int) (err error) {
+func (listener *Listener) OnReceiveMulti(sess session.Session, msgArr []any, totalLen int) (err error) {
 	for _, msg := range msgArr {
 		listener.handleMessage(sess, msg)
 	}
 	return
 }
 
-func (listener *sListener) OnSend(sess session.Session, msg any, msgLen int) (err error) {
+func (listener *Listener) OnSend(sess session.Session, msg any, msgLen int) (err error) {
 	return
 }
 
-func (listener *sListener) OnSendMulti(sess session.Session, msg []any, totalLen int) (err error) {
+func (listener *Listener) OnSendMulti(sess session.Session, msg []any, totalLen int) (err error) {
 	return
 }
 
-func (listener *sListener) handleMessage(sess session.Session, msg any) {
+func (listener *Listener) handleMessage(sess session.Session, msg any) {
 	switch req := msg.(type) {
 	case *codec.MessageReq:
 		listener.handleMessageReq(sess, req)
@@ -66,7 +71,7 @@ func (listener *sListener) handleMessage(sess session.Session, msg any) {
 	}
 }
 
-func (listener *sListener) handleMessageReq(sess session.Session, req *codec.MessageReq) {
+func (listener *Listener) handleMessageReq(sess session.Session, req *codec.MessageReq) {
 	listener.server.Transfer.Forward(int64(sess.Id()), func(local *worker.GoroutineLocal) {
 		sessCtx := coding.Cast[*SenderContext](sess.Context())
 		if sessCtx == nil {
@@ -110,7 +115,7 @@ func (listener *sListener) handleMessageReq(sess session.Session, req *codec.Mes
 	})
 }
 
-func (listener *sListener) handleHeartbeatReq(sess session.Session, req *codec.HeartbeatReq) {
+func (listener *Listener) handleHeartbeatReq(sess session.Session, req *codec.HeartbeatReq) {
 	listener.server.Transfer.Forward(int64(sess.Id()), func(local *worker.GoroutineLocal) {
 		sessCtx := coding.Cast[*SenderContext](sess.Context())
 		if sessCtx == nil {
@@ -148,11 +153,11 @@ func (listener *sListener) handleHeartbeatReq(sess session.Session, req *codec.H
 	})
 }
 
-func (listener *sListener) handleHandshakeReq(sess session.Session, req *codec.HandshakeReq) {
+func (listener *Listener) handleHandshakeReq(sess session.Session, req *codec.HandshakeReq) {
 	listener.server.Transfer.Forward(int64(sess.Id()), func(local *worker.GoroutineLocal) {
-		options := listener.server.Gateway.Options
+		options := listener.server.Options
 		// 校验
-		if req.AuthKey != options.ReceiverAuthKey {
+		if req.AuthKey != options.ReceiverHandshakeAuthKey {
 			sess.SendMessage(&codec.HandshakeRes{Code: codec.ErrCodeInvalidAuthKey})
 			return
 		}

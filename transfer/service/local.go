@@ -25,7 +25,7 @@ type Local struct {
 }
 
 func (local *Local) init(manager *Manager, info Info) error {
-	options := manager.transfer.Gateway.Options
+	options := manager.transfer.Options
 	if manager == nil || options.ServiceMessageHandler == nil {
 		return errdef.ErrInvalidParams
 	}

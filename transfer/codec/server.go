@@ -9,6 +9,10 @@ import (
 	"reflect"
 )
 
+func NewServerCodec(order binary.ByteOrder) *ServerCodec {
+	return &ServerCodec{byteOrder: order}
+}
+
 type ServerCodec struct {
 	byteOrder binary.ByteOrder
 }

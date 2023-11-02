@@ -1,6 +1,7 @@
 package server
 
 import (
+	"github.com/meow-pad/chinchilla/receiver"
 	"github.com/meow-pad/chinchilla/transfer/service"
 	"github.com/meow-pad/persian/frame/pnet/tcp/session"
 	"sync"
@@ -8,19 +9,19 @@ import (
 	"time"
 )
 
-func newSessionContext(server *Server, session session.Session) *SenderContext {
+func newSessionContext(server *receiver.Receiver, session session.Session) *SenderContext {
 	ctx := &SenderContext{
 		server:     server,
 		session:    session,
 		id:         session.Connection().Hash(),
 		registered: false,
 	}
-	ctx.deadline.Store(time.Now().UnixMilli() + server.Gateway.Options.UnregisteredSenderExpiration)
+	ctx.deadline.Store(time.Now().UnixMilli() + server.Options.UnregisteredSenderExpiration)
 	return ctx
 }
 
 type SenderContext struct {
-	server     *Server
+	server     *receiver.Receiver
 	session    session.Session
 	id         uint64
 	deadline   atomic.Int64
@@ -45,7 +46,7 @@ func (ctx *SenderContext) UpdateDeadline() {
 		// 等待注册完成时间是固定的
 		return
 	}
-	ctx.deadline.Store(time.Now().UnixMilli() + ctx.server.Gateway.Options.RegisteredSenderExpiration)
+	ctx.deadline.Store(time.Now().UnixMilli() + ctx.server.Options.RegisteredSenderExpiration)
 }
 
 func (ctx *SenderContext) SetRegistered(value bool) {
@@ -53,7 +54,7 @@ func (ctx *SenderContext) SetRegistered(value bool) {
 		return
 	}
 	ctx.registered = true
-	ctx.deadline.Store(time.Now().UnixMilli() + ctx.server.Gateway.Options.RegisteredSenderExpiration)
+	ctx.deadline.Store(time.Now().UnixMilli() + ctx.server.Options.RegisteredSenderExpiration)
 }
 
 func (ctx *SenderContext) IsRegistered() bool {

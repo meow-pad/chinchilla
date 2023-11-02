@@ -3,10 +3,11 @@ package transfer
 import (
 	"context"
 	"encoding/binary"
-	"github.com/meow-pad/chinchilla/gateway"
+	"github.com/meow-pad/chinchilla/option"
 	"github.com/meow-pad/chinchilla/transfer/codec"
 	"github.com/meow-pad/chinchilla/transfer/selector"
 	"github.com/meow-pad/chinchilla/transfer/service"
+	"github.com/meow-pad/persian/frame/pboot"
 	"github.com/meow-pad/persian/frame/plog"
 	"github.com/meow-pad/persian/frame/plog/pfield"
 	"github.com/meow-pad/persian/frame/pnet/tcp/session"
@@ -16,11 +17,32 @@ import (
 	"github.com/nacos-group/nacos-sdk-go/v2/model"
 )
 
-type Transfer struct {
-	Gateway *gateway.Gateway     `autowire:""`
-	Timer   *timewheel.TimeWheel `autowire:"SecondTimer"`
-	Cache   *cache.Cache         `autowire:""`
+func NewTransfer(
+	appInfo pboot.AppInfo,
+	secTimer *timewheel.TimeWheel,
+	cache *cache.Cache,
+	options *option.Options,
+) (*Transfer, error) {
+	transfer := &Transfer{
+		AppInfo:  appInfo,
+		Options:  options,
+		SecTimer: secTimer,
+		Cache:    cache,
+	}
+	err := transfer.init()
+	if err != nil {
+		return nil, err
+	}
+	return transfer, nil
+}
 
+type Transfer struct {
+	AppInfo  pboot.AppInfo
+	Options  *option.Options
+	SecTimer *timewheel.TimeWheel
+	Cache    *cache.Cache
+
+	registry       *service.Registry
 	selector       selector.Selector
 	executor       *worker.FixedWorkerPool
 	clientManagers map[string]*service.Manager
@@ -29,7 +51,11 @@ type Transfer struct {
 }
 
 func (transfer *Transfer) init() (err error) {
-	options := transfer.Gateway.Options
+	options := transfer.Options
+	transfer.registry, err = service.NewRegistry(transfer.AppInfo, transfer, transfer.Options)
+	if err != nil {
+		return err
+	}
 	if options.ServiceSelector == nil {
 		transfer.selector = selector.NewCompositeSelector(
 			selector.NewCacheSelector(transfer.Cache), selector.NewWeightSelector())
@@ -49,7 +75,7 @@ func (transfer *Transfer) init() (err error) {
 func (transfer *Transfer) Start(ctx context.Context) error {
 	clientCodec := codec.NewClientCodec(binary.LittleEndian)
 	transfer.clientManagers = make(map[string]*service.Manager)
-	options := transfer.Gateway.Options
+	options := transfer.Options
 	for _, srvName := range options.RegistryServiceNames {
 		if srvManager, sErr := service.NewManager(transfer, srvName, clientCodec, transfer.selector); sErr != nil {
 			return sErr
@@ -57,16 +83,22 @@ func (transfer *Transfer) Start(ctx context.Context) error {
 			transfer.clientManagers[srvName] = srvManager
 		}
 	}
-	transfer.cleanTask = transfer.Timer.AddCron(options.CleanSenderSessionCacheInterval, transfer.cleanExpiredSessions)
-	transfer.keepAliveTask = transfer.Timer.AddCron(options.TransferKeepAliveInterval, transfer.keepClientsAlive)
+	transfer.cleanTask = transfer.SecTimer.AddCron(options.CleanSenderSessionCacheInterval, transfer.cleanExpiredSessions)
+	transfer.keepAliveTask = transfer.SecTimer.AddCron(options.TransferKeepAliveInterval, transfer.keepClientsAlive)
+	if err := transfer.registry.Start(ctx); err != nil {
+		return err
+	}
 	return nil
 }
 
 func (transfer *Transfer) Stop(ctx context.Context) error {
-	if err := transfer.Timer.Remove(transfer.keepAliveTask); err != nil {
+	if err := transfer.registry.Stop(ctx); err != nil {
+		plog.Error("stop registry error:", pfield.Error(err))
+	}
+	if err := transfer.SecTimer.Remove(transfer.keepAliveTask); err != nil {
 		plog.Error("remove keepAliveTask error", pfield.Error(err))
 	}
-	if err := transfer.Timer.Remove(transfer.cleanTask); err != nil {
+	if err := transfer.SecTimer.Remove(transfer.cleanTask); err != nil {
 		plog.Error("remove cleanTask error", pfield.Error(err))
 	}
 	return nil

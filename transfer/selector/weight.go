@@ -6,7 +6,7 @@ import (
 	"sort"
 )
 
-func NewWeightSelector() *WeightSelector {
+func NewWeightSelector() Selector {
 	return &WeightSelector{}
 }
 

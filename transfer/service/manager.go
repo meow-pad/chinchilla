@@ -88,7 +88,7 @@ func (manager *Manager) UpdateInstances(instArr []model.Instance) {
 //	@param inst
 //	@return error
 func (manager *Manager) addService(info Info) error {
-	curInstId := manager.transfer.Gateway.AppInfo.Id()
+	curInstId := manager.transfer.AppInfo.Id()
 	if curInstId == info.InstanceId {
 		if srv, err := newLocalService(manager, info); err != nil {
 			return err

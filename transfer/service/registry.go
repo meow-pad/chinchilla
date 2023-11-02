@@ -3,7 +3,7 @@ package service
 import (
 	"context"
 	"errors"
-	"github.com/meow-pad/chinchilla/gateway"
+	"github.com/meow-pad/chinchilla/option"
 	"github.com/meow-pad/chinchilla/transfer"
 	"github.com/meow-pad/persian/frame/pboot"
 	"github.com/meow-pad/persian/frame/plog"
@@ -17,54 +17,75 @@ import (
 	"sync"
 )
 
-type Registry struct {
-	AppInfo  pboot.AppInfo      `autowire:""`
-	Gateway  *gateway.Gateway   `autowire:""`
-	Transfer *transfer.Transfer `autowire:""`
-
-	naming   *name.NacosNaming
-	services sync.Map
+func NewRegistry(appInfo pboot.AppInfo, transfer *transfer.Transfer, options *option.Options) (*Registry, error) {
+	registry := &Registry{
+		appInfo:  appInfo,
+		transfer: transfer,
+		options:  options,
+	}
+	if err := registry.init(); err != nil {
+		return nil, err
+	}
+	return registry, nil
 }
 
-func (manager *Registry) init() error {
-	options := manager.Gateway.Options
-	sConfig := []constant.ServerConfig{
-		*constant.NewServerConfig(options.NamingServiceIPAddr, options.NamingServicePort),
-	}
-	cConfig := constant.NewClientConfig(
-		constant.WithNamespaceId(options.NamingServiceNamespaceId),
-		constant.WithTimeoutMs(options.NamingServiceTimeoutMs),
-		constant.WithNotLoadCacheAtStart(true),
-		constant.WithLogDir(options.NamingServiceLogDir),
-		constant.WithLogLevel(options.NamingServiceLogLevel),
-		constant.WithLogRollingConfig(&options.NamingServiceLogRolling),
-		constant.WithCacheDir(options.NamingServiceCacheDir),
-		constant.WithUsername(options.NamingServiceUsername),
-		constant.WithPassword(options.NamingServicePassword),
-	)
-	var err error
-	if manager.naming, err = name.NewNacosNaming(cConfig, sConfig); err != nil {
-		return err
+type Registry struct {
+	appInfo  pboot.AppInfo
+	options  *option.Options
+	transfer *transfer.Transfer
+
+	naming     *name.NacosNaming
+	autonomous bool
+	services   sync.Map
+}
+
+func (registry *Registry) init() error {
+	options := registry.options
+	if options.NamingService != nil {
+		registry.naming = options.NamingService
+	} else {
+		sConfig := []constant.ServerConfig{
+			*constant.NewServerConfig(options.NamingServiceIPAddr, options.NamingServicePort),
+		}
+		cConfig := constant.NewClientConfig(
+			constant.WithNamespaceId(options.NamingServiceNamespaceId),
+			constant.WithTimeoutMs(options.NamingServiceTimeoutMs),
+			constant.WithNotLoadCacheAtStart(true),
+			constant.WithLogDir(options.NamingServiceLogDir),
+			constant.WithLogLevel(options.NamingServiceLogLevel),
+			constant.WithLogRollingConfig(&options.NamingServiceLogRolling),
+			constant.WithCacheDir(options.NamingServiceCacheDir),
+			constant.WithUsername(options.NamingServiceUsername),
+			constant.WithPassword(options.NamingServicePassword),
+		)
+		var err error
+		if registry.naming, err = name.NewNacosNaming(cConfig, sConfig); err != nil {
+			return err
+		}
+		registry.autonomous = true
 	}
 	return nil
 }
 
-func (manager *Registry) Start(ctx context.Context) error {
-	options := manager.Gateway.Options
+func (registry *Registry) Start(ctx context.Context) error {
+	options := registry.options
 	for _, srvName := range options.RegistryServiceNames {
-		if err := manager.SubscribeService(srvName); err != nil {
+		if err := registry.SubscribeService(srvName); err != nil {
 			return err
 		}
 	}
 	return nil
 }
 
-func (manager *Registry) Stop(ctx context.Context) error {
-	options := manager.Gateway.Options
+func (registry *Registry) Stop(ctx context.Context) error {
+	options := registry.options
 	for _, srvName := range options.RegistryServiceNames {
-		if err := manager.UnSubscribeService(srvName); err != nil {
+		if err := registry.UnSubscribeService(srvName); err != nil {
 			plog.Error("unsubscribe service error:", pfield.Error(err))
 		}
+	}
+	if registry.autonomous {
+		registry.naming.CloseClient()
 	}
 	return nil
 }
@@ -75,24 +96,24 @@ func (manager *Registry) Stop(ctx context.Context) error {
 //	@receiver manager
 //	@param srv
 //	@return error
-func (manager *Registry) SubscribeService(srv string) error {
-	if _, ok := manager.services.Load(srv); ok {
+func (registry *Registry) SubscribeService(srv string) error {
+	if _, ok := registry.services.Load(srv); ok {
 		return nil
 	}
 	params := &vo.SubscribeParam{
-		Clusters:    []string{manager.AppInfo.Cluster()},
+		Clusters:    []string{registry.appInfo.Cluster()},
 		ServiceName: srv,
-		GroupName:   manager.AppInfo.EnvName(),
+		GroupName:   registry.appInfo.EnvName(),
 		SubscribeCallback: func(instances []model.Instance, err error) {
 			plog.Debug("on services changed:", pfield.String("instances", json.ToString(instances)))
-			manager.Transfer.UpdateInstances(srv, instances)
+			registry.transfer.UpdateInstances(srv, instances)
 		},
 	}
-	err := manager.naming.Subscribe(params)
+	err := registry.naming.Subscribe(params)
 	if err != nil {
 		return err
 	}
-	manager.services.Store(srv, params)
+	registry.services.Store(srv, params)
 	return nil
 }
 
@@ -102,23 +123,23 @@ func (manager *Registry) SubscribeService(srv string) error {
 //	@receiver manager
 //	@param srv
 //	@return error
-func (manager *Registry) UnSubscribeService(srv string) error {
+func (registry *Registry) UnSubscribeService(srv string) error {
 	var (
 		value  any
 		ok     bool
 		params *vo.SubscribeParam
 	)
-	if value, ok = manager.services.Load(srv); ok {
+	if value, ok = registry.services.Load(srv); ok {
 		return nil
 	}
 	if params, ok = value.(*vo.SubscribeParam); !ok || params == nil {
 		return errors.New("invalid params:" + reflect.TypeOf(value).String())
 	}
-	err := manager.naming.Unsubscribe(params)
+	err := registry.naming.Unsubscribe(params)
 	if err != nil {
 		return err
 	}
-	manager.services.Delete(srv)
+	registry.services.Delete(srv)
 	return nil
 }
 
@@ -129,11 +150,11 @@ func (manager *Registry) UnSubscribeService(srv string) error {
 //	@param srv
 //	@return model.Service
 //	@return error
-func (manager *Registry) getService(srv string) (model.Service, error) {
-	return manager.naming.GetService(vo.GetServiceParam{
-		Clusters:    []string{manager.AppInfo.Cluster()},
+func (registry *Registry) getService(srv string) (model.Service, error) {
+	return registry.naming.GetService(vo.GetServiceParam{
+		Clusters:    []string{registry.appInfo.Cluster()},
 		ServiceName: srv,
-		GroupName:   manager.AppInfo.EnvName(),
+		GroupName:   registry.appInfo.EnvName(),
 	})
 }
 
@@ -144,11 +165,11 @@ func (manager *Registry) getService(srv string) (model.Service, error) {
 //	@param srv
 //	@return []model.Info
 //	@return error
-func (manager *Registry) selectInstances(srv string) ([]model.Instance, error) {
-	return manager.naming.SelectInstances(vo.SelectInstancesParam{
-		Clusters:    []string{manager.AppInfo.Cluster()},
+func (registry *Registry) selectInstances(srv string) ([]model.Instance, error) {
+	return registry.naming.SelectInstances(vo.SelectInstancesParam{
+		Clusters:    []string{registry.appInfo.Cluster()},
 		ServiceName: srv,
-		GroupName:   manager.AppInfo.EnvName(),
+		GroupName:   registry.appInfo.EnvName(),
 		HealthyOnly: true,
 	})
 }
@@ -161,10 +182,10 @@ func (manager *Registry) selectInstances(srv string) ([]model.Instance, error) {
 //	@param srv
 //	@return *model.Info
 //	@return error
-func (manager *Registry) selectOneHealthInstance(srv string) (*model.Instance, error) {
-	return manager.naming.SelectOneHealthyInstance(vo.SelectOneHealthInstanceParam{
-		Clusters:    []string{manager.AppInfo.Cluster()},
+func (registry *Registry) selectOneHealthInstance(srv string) (*model.Instance, error) {
+	return registry.naming.SelectOneHealthyInstance(vo.SelectOneHealthInstanceParam{
+		Clusters:    []string{registry.appInfo.Cluster()},
 		ServiceName: srv,
-		GroupName:   manager.AppInfo.EnvName(),
+		GroupName:   registry.appInfo.EnvName(),
 	})
 }

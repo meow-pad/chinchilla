@@ -5,7 +5,7 @@ import (
 	"github.com/meow-pad/persian/frame/pservice/cache"
 )
 
-func NewCacheSelector(cache *cache.Cache) *CacheSelector {
+func NewCacheSelector(cache *cache.Cache) Selector {
 	return &CacheSelector{cache: cache}
 }
 
