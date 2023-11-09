@@ -2,13 +2,13 @@ package gateway
 
 import (
 	"context"
-	"errors"
 	"github.com/meow-pad/chinchilla/option"
 	"github.com/meow-pad/chinchilla/receiver"
 	"github.com/meow-pad/chinchilla/transfer"
 	"github.com/meow-pad/persian/frame/pboot"
 	"github.com/meow-pad/persian/frame/pservice/cache"
 	"github.com/meow-pad/persian/utils/timewheel"
+	"github.com/pkg/errors"
 )
 
 func NewGateway(
@@ -24,16 +24,16 @@ func NewGateway(
 		options:  options,
 	}
 	if gw.appInfo == nil {
-		return nil, errors.New("nil appInfo")
+		return nil, errors.WithStack(errors.New("nil appInfo"))
 	}
 	if gw.secTimer == nil {
-		return nil, errors.New("nil secTimer")
+		return nil, errors.WithStack(errors.New("nil secTimer"))
 	}
 	if gw.cache == nil {
-		return nil, errors.New("nil cache")
+		return nil, errors.WithStack(errors.New("nil cache"))
 	}
 	if gw.options == nil {
-		return nil, errors.New("nil options")
+		return nil, errors.WithStack(errors.New("nil options"))
 	}
 	err := gw.init()
 	if err != nil {

@@ -1,7 +1,6 @@
-package server
+package receiver
 
 import (
-	"github.com/meow-pad/chinchilla/receiver"
 	"github.com/meow-pad/chinchilla/transfer/service"
 	"github.com/meow-pad/persian/frame/pnet/tcp/session"
 	"sync"
@@ -9,7 +8,7 @@ import (
 	"time"
 )
 
-func newSessionContext(server *receiver.Receiver, session session.Session) *SenderContext {
+func newSessionContext(server *Receiver, session session.Session) *SenderContext {
 	ctx := &SenderContext{
 		server:     server,
 		session:    session,
@@ -21,7 +20,7 @@ func newSessionContext(server *receiver.Receiver, session session.Session) *Send
 }
 
 type SenderContext struct {
-	server     *receiver.Receiver
+	server     *Receiver
 	session    session.Session
 	id         uint64
 	deadline   atomic.Int64

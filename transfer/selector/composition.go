@@ -1,7 +1,7 @@
 package selector
 
 import (
-	"github.com/meow-pad/chinchilla/transfer/service"
+	"github.com/meow-pad/chinchilla/transfer/common"
 	"github.com/meow-pad/persian/frame/plog"
 	"github.com/meow-pad/persian/frame/plog/pfield"
 )
@@ -15,10 +15,10 @@ func NewCompositeSelector(selectors ...Selector) Selector {
 type CompositeSelector struct {
 	selectors []Selector
 
-	infoArr []service.Info
+	infoArr []common.Info
 }
 
-func (selector *CompositeSelector) Select(routerId string) (string, error) {
+func (selector *CompositeSelector) Select(routerId uint64) (string, error) {
 	if len(selector.infoArr) <= 0 {
 		return "", ErrEmptyInstances
 	}
@@ -36,7 +36,7 @@ func (selector *CompositeSelector) Select(routerId string) (string, error) {
 	return "", nil
 }
 
-func (selector *CompositeSelector) Update(infoArr []service.Info) {
+func (selector *CompositeSelector) Update(infoArr []common.Info) {
 	copy(selector.infoArr, infoArr)
 	for _, _selector := range selector.selectors {
 		_selector.Update(infoArr)

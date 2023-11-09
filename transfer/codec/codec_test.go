@@ -15,6 +15,11 @@ func _getObjectValue(ptr any) any {
 
 func TestCodec_Req(t *testing.T) {
 	should := require.New(t)
+	segmentMsg := &SegmentMsg{
+		Amount: 12345,
+		Seq:    123,
+		Frame:  []byte{1, 2, 3, 4, 5},
+	}
 	handshakeReq := &HandshakeReq{
 		Id:        "1234",
 		AuthKey:   "12345",
@@ -36,7 +41,7 @@ func TestCodec_Req(t *testing.T) {
 		ConnId:  12345,
 		Payload: []byte{1, 2, 3, 4, 5},
 	}
-	messages := []any{handshakeReq, registerSReq, unregisterReq, heartbeatSReq, messageSReq}
+	messages := []any{segmentMsg, handshakeReq, registerSReq, unregisterReq, heartbeatSReq, messageSReq}
 	cCodec := ClientCodec{byteOrder: binary.BigEndian}
 	sCodec := ServerCodec{byteOrder: binary.BigEndian}
 	for _, msg := range messages {
@@ -54,6 +59,11 @@ func TestCodec_Req(t *testing.T) {
 
 func TestCodec_Res(t *testing.T) {
 	should := require.New(t)
+	segmentMsg := &SegmentMsg{
+		Amount: 12345,
+		Seq:    123,
+		Frame:  []byte{1, 2, 3, 4, 5},
+	}
 	handshakeRes := &HandshakeRes{
 		Code: 123,
 	}
@@ -74,7 +84,7 @@ func TestCodec_Res(t *testing.T) {
 		ConnId:  12345,
 		Payload: []byte{1, 2, 3, 4, 5},
 	}
-	messages := []any{handshakeRes, registerSRes, unregisterSRes, heartbeatSRes, messageSRes}
+	messages := []any{segmentMsg, handshakeRes, registerSRes, unregisterSRes, heartbeatSRes, messageSRes}
 	cCodec := ClientCodec{byteOrder: binary.BigEndian}
 	sCodec := ServerCodec{byteOrder: binary.BigEndian}
 	for _, msg := range messages {

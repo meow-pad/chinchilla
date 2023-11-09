@@ -7,14 +7,19 @@ import (
 	"math"
 )
 
-func NewMessageCodec(msgCodec message.Codec, messageWarningSize int) (codec.Codec, error) {
+var (
+	MessageCodecByteOrder = binary.LittleEndian
+)
+
+func NewCodec(msgCodec message.Codec, messageWarningSize int) (codec.Codec, error) {
 	opts := []codec.Option[*codec.LengthOptions]{
 		codec.WithMessageCodec[*codec.LengthOptions](msgCodec),
-		codec.WithByteOrder(binary.BigEndian),
+		codec.WithByteOrder(binary.LittleEndian),
 		codec.WithLengthSize(2),
 		codec.WithMaxDecodedLength[*codec.LengthOptions](math.MaxInt16),
 		codec.WithMaxEncodedLength[*codec.LengthOptions](math.MaxInt16),
 		codec.WithWarningEncodedLength[*codec.LengthOptions](messageWarningSize),
+		codec.WithEncodeLargeMessage(MessageSegmentation),
 	}
 	return codec.NewLengthFieldCodec(opts...)
 }

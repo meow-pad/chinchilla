@@ -1,7 +1,7 @@
 package selector
 
 import (
-	"github.com/meow-pad/chinchilla/transfer/service"
+	"github.com/meow-pad/chinchilla/transfer/common"
 	"math/rand"
 	"sort"
 )
@@ -11,11 +11,11 @@ func NewWeightSelector() Selector {
 }
 
 type WeightSelector struct {
-	infoArr []service.Info
+	infoArr []common.Info
 	weights []int
 }
 
-func (selector *WeightSelector) Select(routerId string) (string, error) {
+func (selector *WeightSelector) Select(routerId uint64) (string, error) {
 	instLen := len(selector.infoArr)
 	if instLen <= 0 {
 		return "", ErrEmptyInstances
@@ -28,7 +28,7 @@ func (selector *WeightSelector) Select(routerId string) (string, error) {
 	return selector.infoArr[i].InstanceId, nil
 }
 
-func (selector *WeightSelector) Update(infoArr []service.Info) {
+func (selector *WeightSelector) Update(infoArr []common.Info) {
 	weights := make([]int, len(infoArr))
 	sum := 0
 	for i, inst := range infoArr {

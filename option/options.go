@@ -3,6 +3,7 @@ package option
 import (
 	"github.com/meow-pad/chinchilla/handler"
 	"github.com/meow-pad/chinchilla/transfer/selector"
+	"github.com/meow-pad/persian/frame/pnet/tcp/session"
 	ws "github.com/meow-pad/persian/frame/pnet/ws/server"
 	"github.com/meow-pad/persian/frame/pservice/name"
 	"github.com/meow-pad/persian/utils/runtime"
@@ -107,8 +108,10 @@ type Options struct {
 
 	// 关注的服务名
 	RegistryServiceNames []string // setting
-	// 服务消息处理器
-	ServiceMessageHandler map[string]handler.MessageHandler // setting
+	// 本地会话上下文
+	LocalContextBuilder func(session.Session) (session.Context, error)
+	// 本地服务消息处理器
+	LocalMessageHandler map[string]handler.MessageHandler // setting
 	// 服务选择器
 	ServiceSelector selector.Selector // 默认值为cache和wrr的组合
 }
@@ -123,7 +126,7 @@ func WithReceiverHandshakeAuthKey(value string) Option {
 
 func WithReceiverServerProtoAddr(value string) Option {
 	return func(options *Options) {
-		options.ReceiverHandshakeAuthKey = value
+		options.ReceiverServerProtoAddr = value
 	}
 }
 
@@ -273,9 +276,15 @@ func WithRegistryServiceNames(value []string) Option {
 	}
 }
 
-func WithServiceMessageHandler(value map[string]handler.MessageHandler) Option {
+func WithLocalContextBuilder(value func(session.Session) (session.Context, error)) Option {
 	return func(options *Options) {
-		options.ServiceMessageHandler = value
+		options.LocalContextBuilder = value
+	}
+}
+
+func WithLocalMessageHandler(value map[string]handler.MessageHandler) Option {
+	return func(options *Options) {
+		options.LocalMessageHandler = value
 	}
 }
 

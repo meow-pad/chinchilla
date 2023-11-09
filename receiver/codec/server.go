@@ -72,7 +72,7 @@ func (sCodec *ServerCodec) Decode(in []byte) (any, error) {
 		req := &HandshakeReq{}
 		left := in[1:]
 		err := error(nil)
-		if req.RouterId, left, err = codec.ReadString(sCodec.byteOrder, left); err != nil {
+		if req.RouterId, left, err = codec.ReadUint64(sCodec.byteOrder, left); err != nil {
 			return nil, err
 		}
 		if req.AuthKey, left, err = codec.ReadString(sCodec.byteOrder, left); err != nil {

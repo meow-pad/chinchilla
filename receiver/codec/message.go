@@ -10,7 +10,7 @@ const (
 )
 
 type HandshakeReq struct {
-	RouterId string // 服务路由编号
+	RouterId uint64 // 服务路由编号
 	AuthKey  string
 	Service  string // 服务
 }

@@ -2,11 +2,9 @@ package transfer
 
 import (
 	"context"
-	"encoding/binary"
 	"github.com/meow-pad/chinchilla/option"
 	"github.com/meow-pad/chinchilla/transfer/codec"
 	"github.com/meow-pad/chinchilla/transfer/selector"
-	"github.com/meow-pad/chinchilla/transfer/service"
 	"github.com/meow-pad/persian/frame/pboot"
 	"github.com/meow-pad/persian/frame/plog"
 	"github.com/meow-pad/persian/frame/plog/pfield"
@@ -42,23 +40,22 @@ type Transfer struct {
 	SecTimer *timewheel.TimeWheel
 	Cache    *cache.Cache
 
-	registry       *service.Registry
-	selector       selector.Selector
-	executor       *worker.FixedWorkerPool
-	clientManagers map[string]*service.Manager
-	cleanTask      *timewheel.Task
-	keepAliveTask  *timewheel.Task
+	registry      *Registry
+	selector      selector.Selector
+	executor      *worker.FixedWorkerPool
+	clientMgrMap  map[string]*Manager
+	cleanTask     *timewheel.Task
+	keepAliveTask *timewheel.Task
 }
 
 func (transfer *Transfer) init() (err error) {
 	options := transfer.Options
-	transfer.registry, err = service.NewRegistry(transfer.AppInfo, transfer, transfer.Options)
+	transfer.registry, err = NewRegistry(transfer.AppInfo, transfer, transfer.Options)
 	if err != nil {
 		return err
 	}
 	if options.ServiceSelector == nil {
-		transfer.selector = selector.NewCompositeSelector(
-			selector.NewCacheSelector(transfer.Cache), selector.NewWeightSelector())
+		transfer.selector = selector.NewWeightSelector()
 	} else {
 		transfer.selector = options.ServiceSelector
 	}
@@ -73,14 +70,14 @@ func (transfer *Transfer) init() (err error) {
 }
 
 func (transfer *Transfer) Start(ctx context.Context) error {
-	clientCodec := codec.NewClientCodec(binary.LittleEndian)
-	transfer.clientManagers = make(map[string]*service.Manager)
+	clientCodec := codec.NewClientCodec(codec.MessageCodecByteOrder)
+	transfer.clientMgrMap = make(map[string]*Manager)
 	options := transfer.Options
 	for _, srvName := range options.RegistryServiceNames {
-		if srvManager, sErr := service.NewManager(transfer, srvName, clientCodec, transfer.selector); sErr != nil {
+		if srvManager, sErr := NewManager(transfer, srvName, clientCodec, transfer.selector); sErr != nil {
 			return sErr
 		} else {
-			transfer.clientManagers[srvName] = srvManager
+			transfer.clientMgrMap[srvName] = srvManager
 		}
 	}
 	transfer.cleanTask = transfer.SecTimer.AddCron(options.CleanSenderSessionCacheInterval, transfer.cleanExpiredSessions)
@@ -124,7 +121,7 @@ func (transfer *Transfer) Forward(connId int64, task func(*worker.GoroutineLocal
 //	@param instances
 func (transfer *Transfer) UpdateInstances(srvName string, instances []model.Instance) {
 	if err := transfer.executor.Submit(0, func(*worker.GoroutineLocal) {
-		manager := transfer.clientManagers[srvName]
+		manager := transfer.clientMgrMap[srvName]
 		if manager == nil {
 			plog.Error("unknown service", pfield.String("srvName", srvName))
 		} else {
@@ -165,12 +162,12 @@ func (transfer *Transfer) cleanExpiredSessions() {
 //	@Description: 客户端保活
 //	@receiver transfer
 func (transfer *Transfer) keepClientsAlive() {
-	for _, manager := range transfer.clientManagers {
+	for _, manager := range transfer.clientMgrMap {
 		manager.KeepClientsAlive()
 	}
 }
 
-func (transfer *Transfer) GetServiceManager(service string) *service.Manager {
-	manager, _ := transfer.clientManagers[service]
+func (transfer *Transfer) GetServiceManager(service string) *Manager {
+	manager, _ := transfer.clientMgrMap[service]
 	return manager
 }

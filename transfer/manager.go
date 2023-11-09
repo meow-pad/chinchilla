@@ -1,10 +1,11 @@
-package service
+package transfer
 
 import (
 	"errors"
-	"github.com/meow-pad/chinchilla/transfer"
 	"github.com/meow-pad/chinchilla/transfer/codec"
+	"github.com/meow-pad/chinchilla/transfer/common"
 	"github.com/meow-pad/chinchilla/transfer/selector"
+	"github.com/meow-pad/chinchilla/transfer/service"
 	"github.com/meow-pad/persian/errdef"
 	"github.com/meow-pad/persian/frame/plog"
 	"github.com/meow-pad/persian/frame/plog/pfield"
@@ -13,7 +14,7 @@ import (
 	"sync"
 )
 
-func NewManager(transfer *transfer.Transfer,
+func NewManager(transfer *Transfer,
 	service string, clientCodec *codec.ClientCodec, selector selector.Selector) (*Manager, error) {
 	if transfer == nil || clientCodec == nil {
 		return nil, errdef.ErrInvalidParams
@@ -24,13 +25,13 @@ func NewManager(transfer *transfer.Transfer,
 }
 
 type Manager struct {
-	transfer    *transfer.Transfer
+	transfer    *Transfer
 	service     string
 	selector    selector.Selector
 	clientCodec *codec.ClientCodec
 
 	services   sync.Map
-	srvInfoArr []Info
+	srvInfoArr []common.Info
 }
 
 // UpdateInstances
@@ -39,10 +40,10 @@ type Manager struct {
 //	@receiver manager
 //	@param instArr
 func (manager *Manager) UpdateInstances(instArr []model.Instance) {
-	var infoMap map[string]*Info
-	var srvInfoArr []Info
+	var infoMap map[string]*common.Info
+	var srvInfoArr []common.Info
 	for _, inst := range instArr {
-		info := Info(inst)
+		info := common.Info(inst)
 		infoMap[info.InstanceId] = &info
 		// 添加新增的服务的连接
 		_, ok := manager.services.Load(info.InstanceId)
@@ -61,7 +62,7 @@ func (manager *Manager) UpdateInstances(instArr []model.Instance) {
 	}
 	manager.services.Range(func(key, value any) bool {
 		id := key.(string)
-		srv := value.(Service)
+		srv := value.(service.Service)
 		newInst, _ := infoMap[id]
 		if newInst == nil {
 			cInfo := srv.Info()
@@ -87,22 +88,22 @@ func (manager *Manager) UpdateInstances(instArr []model.Instance) {
 //	@receiver manager
 //	@param inst
 //	@return error
-func (manager *Manager) addService(info Info) error {
+func (manager *Manager) addService(info common.Info) error {
 	curInstId := manager.transfer.AppInfo.Id()
 	if curInstId == info.InstanceId {
-		if srv, err := newLocalService(manager, info); err != nil {
+		if srv, err := NewLocalService(manager, info); err != nil {
 			return err
 		} else {
 			manager.services.Store(info.InstanceId, srv)
 		}
 	} else {
-		srv, err := newRemoteService(manager, info)
+		srv, err := NewRemoteService(manager, info)
 		if err != nil {
 			return err
 		}
 		manager.services.Store(info.InstanceId, srv)
 		// 尝试连接
-		err = srv.connect()
+		err = srv.Connect()
 		if err != nil {
 			plog.Error("connect to service error:", pfield.Error(err))
 		}
@@ -116,7 +117,7 @@ func (manager *Manager) addService(info Info) error {
 //	@receiver manager
 func (manager *Manager) KeepClientsAlive() {
 	manager.services.Range(func(key, val any) bool {
-		if !val.(Service).KeepAlive() {
+		if !val.(service.Service).KeepAlive() {
 			manager.services.Delete(key)
 		}
 		return true
@@ -130,7 +131,7 @@ func (manager *Manager) KeepClientsAlive() {
 //	@param routerId
 //	@return Service
 //	@return error
-func (manager *Manager) SelectInstance(routerId string) (Service, error) {
+func (manager *Manager) SelectInstance(routerId uint64) (service.Service, error) {
 	instId, err := manager.selector.Select(routerId)
 	if err != nil && !errors.Is(err, selector.ErrEmptyInstances) {
 		return nil, err
@@ -143,7 +144,7 @@ func (manager *Manager) SelectInstance(routerId string) (Service, error) {
 		plog.Warn("cannot find client by instance id")
 		return nil, nil
 	}
-	client := srvObj.(Service)
+	client := srvObj.(service.Service)
 	if client == nil {
 		plog.Error("invalid client object", pfield.String("objType", reflect.TypeOf(srvObj).String()))
 		return nil, nil
@@ -160,7 +161,7 @@ func (manager *Manager) SelectInstance(routerId string) (Service, error) {
 //
 //	@Description: 获取实例信息
 //	@receiver manager
-//	@return []model.Info
-func (manager *Manager) GetServiceInfoArray() []Info {
+//	@return []common.Info
+func (manager *Manager) GetServiceInfoArray() []common.Info {
 	return manager.srvInfoArr
 }

@@ -1,14 +1,17 @@
-package service
+package transfer
 
 import (
 	"context"
 	"errors"
 	"fmt"
 	"github.com/meow-pad/chinchilla/transfer/codec"
+	"github.com/meow-pad/chinchilla/transfer/common"
+	"github.com/meow-pad/chinchilla/transfer/service"
 	"github.com/meow-pad/persian/errdef"
 	"github.com/meow-pad/persian/frame/plog"
 	"github.com/meow-pad/persian/frame/plog/pfield"
 	"github.com/meow-pad/persian/frame/pnet/tcp/client"
+	tcodec "github.com/meow-pad/persian/frame/pnet/tcp/codec"
 	"github.com/meow-pad/persian/utils/json"
 	"math"
 	"sync/atomic"
@@ -24,7 +27,7 @@ const (
 )
 
 var (
-	ErrConnectClientFirst   = errors.New("connect client first")
+	ErrConnectClientFirst   = errors.New("Connect client first")
 	ErrConnectingClient     = errors.New("client is connecting")
 	ErrNotConnected         = errors.New("not in connected state")
 	ErrFrequentReconnection = errors.New("reconnection is too frequent")
@@ -35,7 +38,7 @@ var (
 	reconnectInterval = []int64{1000, 2000, 4000, 8000, 10_000}
 )
 
-func newRemoteService(manager *Manager, srvInfo Info) (*Remote, error) {
+func NewRemoteService(manager *Manager, srvInfo common.Info) (*Remote, error) {
 	remote := &Remote{}
 	if err := remote.init(manager, srvInfo); err != nil {
 		return nil, err
@@ -46,8 +49,9 @@ func newRemoteService(manager *Manager, srvInfo Info) (*Remote, error) {
 // Remote 远程服务实例
 type Remote struct {
 	manager    *Manager
+	codec      tcodec.Codec
 	inner      *client.Client
-	info       Info
+	info       common.Info
 	state      atomic.Int32
 	certified  atomic.Bool
 	dialCtx    context.Context
@@ -57,9 +61,12 @@ type Remote struct {
 	reconnectLvl int
 	// 最终关闭时间
 	deadline int64
+	// 分段数据
+	segmentFrameBuf    []byte
+	segmentFrameAmount uint16
 }
 
-func (remoteSrv *Remote) init(manager *Manager, srvInfo Info) error {
+func (remoteSrv *Remote) init(manager *Manager, srvInfo common.Info) error {
 	if manager == nil {
 		return errdef.ErrInvalidParams
 	}
@@ -67,12 +74,19 @@ func (remoteSrv *Remote) init(manager *Manager, srvInfo Info) error {
 	remoteSrv.info = srvInfo
 	remoteSrv.state.Store(StateInitialized)
 	remoteSrv.deadline = math.MaxInt64
+	// 编码器
+	options := remoteSrv.manager.transfer.Options
+	cCodec, err := codec.NewCodec(remoteSrv.manager.clientCodec, options.TransferMessageWarningSize)
+	if err != nil {
+		return err
+	}
+	remoteSrv.codec = cCodec
 	return nil
 }
 
-func (remoteSrv *Remote) UpdateInfo(srvInst Info) error {
+func (remoteSrv *Remote) UpdateInfo(srvInst common.Info) error {
 	if remoteSrv.state.Load() == StateStopped {
-		return ErrStoppedInstance
+		return service.ErrStoppedInstance
 	}
 	if remoteSrv.info.InstanceId != srvInst.InstanceId || remoteSrv.info.Ip != srvInst.Ip || remoteSrv.info.Port != srvInst.Port {
 		plog.Warn("invalid service instance:",
@@ -96,8 +110,8 @@ func (remoteSrv *Remote) UpdateInfo(srvInst Info) error {
 					remoteSrv.state.Store(StateInitialized)
 					remoteSrv.deadline = math.MaxInt64
 					// 尝试连接
-					if err := remoteSrv.connect(); err != nil {
-						plog.Error("connect error:", pfield.Error(err))
+					if err := remoteSrv.Connect(); err != nil {
+						plog.Error("Connect error:", pfield.Error(err))
 					}
 				} // end of if
 			} // end of else
@@ -106,7 +120,7 @@ func (remoteSrv *Remote) UpdateInfo(srvInst Info) error {
 	return nil
 }
 
-func (remoteSrv *Remote) Info() Info {
+func (remoteSrv *Remote) Info() common.Info {
 	return remoteSrv.info
 }
 
@@ -119,7 +133,7 @@ func (remoteSrv *Remote) disable() error {
 	state := remoteSrv.state.Load()
 	switch state {
 	case StateStopped:
-		return ErrStoppedInstance
+		return service.ErrStoppedInstance
 	default:
 		remoteSrv.info.Enable = false
 		if state != StateDisabled || remoteSrv.deadline == math.MaxInt64 {
@@ -139,19 +153,19 @@ func (remoteSrv *Remote) getReconnectInterval() int64 {
 	return reconnectInterval[remoteSrv.reconnectLvl%len(reconnectInterval)]
 }
 
-// connect
+// Connect
 //
 //	@Description: 连接
 //	@receiver sClient
 //	@return error
-func (remoteSrv *Remote) connect() error {
+func (remoteSrv *Remote) Connect() error {
 	// 触发可见性
 	state := remoteSrv.state.Load()
 	switch state {
 	case StateDisabled:
-		return ErrDisabledService
+		return service.ErrDisabledService
 	case StateStopped:
-		return ErrStoppedInstance
+		return service.ErrStoppedInstance
 	default:
 	}
 	if remoteSrv.dialCtx != nil {
@@ -176,11 +190,7 @@ func (remoteSrv *Remote) connect() error {
 		client.WithSocketRecvBuffer(options.TransferClientSocketRecvBuffer),
 		client.WithSocketSendBuffer(options.TransferClientSocketSendBuffer),
 	}
-	cCodec, err := codec.NewMessageCodec(remoteSrv.manager.clientCodec, options.TransferMessageWarningSize)
-	if err != nil {
-		return err
-	}
-	tClient, err := client.NewClient(cCodec, &Listener{client: remoteSrv}, clientOpts...)
+	tClient, err := client.NewClient(remoteSrv.codec, newRemoteListener(remoteSrv), clientOpts...)
 	if err == nil {
 		return err
 	}
@@ -200,7 +210,7 @@ func (remoteSrv *Remote) connect() error {
 func (remoteSrv *Remote) _connect(tClient *client.Client) {
 	err := tClient.Dial(remoteSrv.dialCtx, fmt.Sprintf("%s:%d", remoteSrv.info.Ip, remoteSrv.info.Port))
 	if err != nil {
-		plog.Error("client connect error:", pfield.Error(err))
+		plog.Error("client Connect error:", pfield.Error(err))
 	}
 	remoteSrv.inner = tClient
 	// 重置重连间隔
@@ -260,7 +270,7 @@ func (remoteSrv *Remote) KeepAlive() bool {
 		return false
 	default:
 		if remoteSrv.inner.IsClosed() {
-			err := remoteSrv.connect()
+			err := remoteSrv.Connect()
 			if err != nil {
 				plog.Error("reconnect error:", pfield.Error(err))
 			}
@@ -288,13 +298,13 @@ func (remoteSrv *Remote) checkAlive() error {
 	case StateConnecting:
 		return ErrConnectingClient
 	case StateDisabled:
-		return ErrDisabledService
+		return service.ErrDisabledService
 	case StateStopped:
-		return ErrStoppedInstance
+		return service.ErrStoppedInstance
 	default:
 	}
 	if remoteSrv.inner.IsClosed() {
-		err := remoteSrv.connect()
+		err := remoteSrv.Connect()
 		if err != nil {
 			return err
 		} else {
@@ -346,7 +356,7 @@ func (remoteSrv *Remote) IsStopped() bool {
 func (remoteSrv *Remote) Stop(ctx context.Context) error {
 	state := remoteSrv.state.Load()
 	if state == StateStopped {
-		return ErrStoppedInstance
+		return service.ErrStoppedInstance
 	}
 	if remoteSrv.dialCancel != nil {
 		remoteSrv.dialCancel()

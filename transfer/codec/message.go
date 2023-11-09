@@ -1,18 +1,27 @@
 package codec
 
 const (
-	TypeHandshake = iota + 1
+	TypeSegment = iota + 1
+	TypeHandshake
 	TypeRegisterS
 	TypeUnregisterS
 	TypeHeartbeatS
 	TypeMessageS
 )
 
+type SegmentMsg struct {
+	Amount uint16
+	Seq    uint16
+	Frame  []byte
+}
+
 type HandshakeReq struct {
-	Id        string // 当前实例id
-	AuthKey   string // 认证
-	Service   string // 目标服务名
-	ServiceId string // 目标服务ID
+	Id        string   // 当前实例id
+	AuthKey   string   // 认证
+	Service   string   // 目标服务名
+	ServiceId string   // 目标服务ID
+	ConnIds   []uint64 // 已注册连接编号
+	RouterIds []uint64 // 已注册路由编号
 }
 
 type HandshakeRes struct {

@@ -1,10 +1,9 @@
-package service
+package transfer
 
 import (
 	"context"
 	"errors"
 	"github.com/meow-pad/chinchilla/option"
-	"github.com/meow-pad/chinchilla/transfer"
 	"github.com/meow-pad/persian/frame/pboot"
 	"github.com/meow-pad/persian/frame/plog"
 	"github.com/meow-pad/persian/frame/plog/pfield"
@@ -17,7 +16,7 @@ import (
 	"sync"
 )
 
-func NewRegistry(appInfo pboot.AppInfo, transfer *transfer.Transfer, options *option.Options) (*Registry, error) {
+func NewRegistry(appInfo pboot.AppInfo, transfer *Transfer, options *option.Options) (*Registry, error) {
 	registry := &Registry{
 		appInfo:  appInfo,
 		transfer: transfer,
@@ -32,7 +31,7 @@ func NewRegistry(appInfo pboot.AppInfo, transfer *transfer.Transfer, options *op
 type Registry struct {
 	appInfo  pboot.AppInfo
 	options  *option.Options
-	transfer *transfer.Transfer
+	transfer *Transfer
 
 	naming     *name.NacosNaming
 	autonomous bool

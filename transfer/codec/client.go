@@ -43,7 +43,8 @@ func (cCodec *ClientCodec) Encode(msg any) ([]byte, error) {
 		copy(buf[9:], req.Payload)
 		return buf, nil
 	case *HandshakeReq:
-		buf := make([]byte, 1+8+len(req.Id)+len(req.AuthKey)+len(req.Service)+len(req.ServiceId))
+		buf := make([]byte, 1+8+len(req.Id)+len(req.AuthKey)+len(req.Service)+len(req.ServiceId)+
+			codec.Uint64ArrayLen(req.ConnIds)+codec.Uint64ArrayLen(req.RouterIds))
 		buf[0] = TypeHandshake
 		left := buf[1:]
 		err := error(nil)
@@ -63,7 +64,17 @@ func (cCodec *ClientCodec) Encode(msg any) ([]byte, error) {
 		if err != nil {
 			return nil, err
 		}
+		left, err = codec.WriteUint64Array(cCodec.byteOrder, req.ConnIds, left)
+		if err != nil {
+			return nil, err
+		}
+		left, err = codec.WriteUint64Array(cCodec.byteOrder, req.RouterIds, left)
+		if err != nil {
+			return nil, err
+		}
 		return buf, nil
+	case *SegmentMsg:
+		return encodeSegmentMsg(cCodec.byteOrder, req)
 	default:
 		return nil, errors.New("invalid message type:" + reflect.TypeOf(msg).String())
 	}
@@ -125,6 +136,8 @@ func (cCodec *ClientCodec) Decode(in []byte) (any, error) {
 			return nil, err
 		}
 		return res, nil
+	case TypeSegment:
+		return decodeSegmentMsg(cCodec.byteOrder, in[1:])
 	default:
 		return nil, errors.New("invalid message type")
 	}

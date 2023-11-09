@@ -61,6 +61,8 @@ func (sCodec *ServerCodec) Encode(msg any) ([]byte, error) {
 		buf[0] = TypeHandshake
 		sCodec.byteOrder.PutUint16(buf[1:], res.Code)
 		return buf, nil
+	case *SegmentMsg:
+		return encodeSegmentMsg(sCodec.byteOrder, res)
 	default:
 		return nil, errors.New("invalid message type:" + reflect.TypeOf(msg).String())
 	}
@@ -124,7 +126,15 @@ func (sCodec *ServerCodec) Decode(in []byte) (any, error) {
 		if req.ServiceId, left, err = codec.ReadString(sCodec.byteOrder, left); err != nil {
 			return nil, err
 		}
+		if req.ConnIds, left, err = codec.ReadUint64Array(sCodec.byteOrder, left); err != nil {
+			return nil, err
+		}
+		if req.RouterIds, left, err = codec.ReadUint64Array(sCodec.byteOrder, left); err != nil {
+			return nil, err
+		}
 		return req, nil
+	case TypeSegment:
+		return decodeSegmentMsg(sCodec.byteOrder, in[1:])
 	default:
 		return nil, errors.New("invalid message type")
 	}

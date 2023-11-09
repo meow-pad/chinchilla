@@ -1,7 +1,6 @@
-package server
+package receiver
 
 import (
-	"github.com/meow-pad/chinchilla/receiver"
 	"github.com/meow-pad/chinchilla/receiver/codec"
 	tcodec "github.com/meow-pad/chinchilla/transfer/codec"
 	"github.com/meow-pad/persian/frame/plog"
@@ -11,12 +10,12 @@ import (
 	"github.com/meow-pad/persian/utils/worker"
 )
 
-func NewListener(server *receiver.Receiver) *Listener {
+func NewListener(server *Receiver) *Listener {
 	return &Listener{server: server}
 }
 
 type Listener struct {
-	server *receiver.Receiver
+	server *Receiver
 }
 
 func (listener *Listener) OnOpened(sess session.Session) {

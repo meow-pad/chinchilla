@@ -2,7 +2,7 @@ package selector
 
 import (
 	"errors"
-	"github.com/meow-pad/chinchilla/transfer/service"
+	"github.com/meow-pad/chinchilla/transfer/common"
 )
 
 var (
@@ -17,11 +17,11 @@ type Selector interface {
 	//  @return string 有数据但选不出来时，该值为空字符串
 	//  @return error 如果实例数组本就为空，则返回 ErrEmptyInstances
 	//
-	Select(routerId string) (string, error)
+	Select(routerId uint64) (string, error)
 
 	// Update
 	//  @Description: 更新可用服务列表
 	//  @param infoArr
 	//
-	Update(instances []service.Info)
+	Update(instances []common.Info)
 }

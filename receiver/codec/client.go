@@ -37,11 +37,11 @@ func (cCodec *ClientCodec) Encode(msg any) ([]byte, error) {
 		copy(left, req.Payload)
 		return buf, nil
 	case *HandshakeReq:
-		buf := make([]byte, len(req.RouterId)+len(req.AuthKey)+len(req.Service)+6+1)
+		buf := make([]byte, 8+len(req.AuthKey)+len(req.Service)+6+1)
 		buf[0] = TypeHandshake
 		left := buf[1:]
 		err := error(nil)
-		if left, err = codec.WriteString(cCodec.byteOrder, req.RouterId, left); err != nil {
+		if left, err = codec.WriteUint64(cCodec.byteOrder, req.RouterId, left); err != nil {
 			return nil, err
 		}
 		if left, err = codec.WriteString(cCodec.byteOrder, req.AuthKey, left); err != nil {

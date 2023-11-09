@@ -3,7 +3,7 @@ package service
 import (
 	"context"
 	"errors"
-	"github.com/nacos-group/nacos-sdk-go/v2/model"
+	"github.com/meow-pad/chinchilla/transfer/common"
 )
 
 var (
@@ -11,21 +11,19 @@ var (
 	ErrStoppedInstance = errors.New("instance is stopped")
 )
 
-type Info model.Instance
-
 type Service interface {
 	// UpdateInfo
 	//  @Description: 更新服务实例状态
 	//  @param info
 	//  @return error
 	//
-	UpdateInfo(info Info) error
+	UpdateInfo(info common.Info) error
 
 	// Info
 	//  @Description: 状态对象
 	//  @return model.Info
 	//
-	Info() Info
+	Info() common.Info
 
 	// KeepAlive
 	//  @Description: 保活操作

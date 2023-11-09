@@ -7,6 +7,28 @@ import (
 	"math"
 )
 
+func Uint64ArrayLen(arr []uint64) int {
+	arrLen := len(arr)
+	return 8*arrLen + 2
+}
+
+func ReadUint64Array(byteOrder binary.ByteOrder, buf []byte) (result []uint64, left []byte, err error) {
+	if len(buf) < 2 {
+		return nil, nil, io.ErrShortBuffer
+	}
+	left = buf[2:]
+	arrLen := int(byteOrder.Uint16(buf))
+	if arrLen*8 > len(left) {
+		return nil, nil, io.ErrShortBuffer
+	}
+	for i := 0; i < arrLen; i++ {
+		value := byteOrder.Uint64(left)
+		result = append(result, value)
+		left = left[8:]
+	}
+	return
+}
+
 func ReadUint16(byteOrder binary.ByteOrder, buf []byte) (result uint16, left []byte, err error) {
 	if len(buf) < 2 {
 		return 0, nil, io.ErrShortBuffer
@@ -31,6 +53,27 @@ func ReadUint64(byteOrder binary.ByteOrder, buf []byte) (result uint64, left []b
 	}
 	result = byteOrder.Uint64(buf)
 	left = buf[8:]
+	return
+}
+
+func WriteUint64Array(byteOrder binary.ByteOrder, data []uint64, buf []byte) (left []byte, err error) {
+	lenBuf := len(buf)
+	if lenBuf < 2 {
+		return nil, io.ErrShortWrite
+	}
+	arrLen := len(data)
+	if arrLen >= math.MaxUint16 {
+		return nil, pnet.ErrMessageTooLarge
+	}
+	byteOrder.PutUint16(buf, uint16(arrLen))
+	left = buf[2:]
+	if len(left) < arrLen*8 {
+		return nil, io.ErrShortWrite
+	}
+	for _, value := range data {
+		byteOrder.PutUint64(left, value)
+		left = left[8:]
+	}
 	return
 }
 
