@@ -1,7 +1,7 @@
 package codec
 
 const (
-	TypeHandshake byte = iota + 1
+	TypeHandshake uint8 = iota + 1
 	TypeHeartbeat
 	TypeMessage
 
@@ -12,7 +12,7 @@ const (
 type HandshakeReq struct {
 	RouterId uint64 // 服务路由编号
 	AuthKey  string
-	Service  string // 服务
+	Service  string // 默认服务
 }
 
 type HandshakeRes struct {

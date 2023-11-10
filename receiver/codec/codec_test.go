@@ -16,7 +16,7 @@ func _getObjectValue(ptr any) any {
 func TestCodec_Req(t *testing.T) {
 	should := require.New(t)
 	handshakeReq := &HandshakeReq{
-		RouterId: "a-b-c-d",
+		RouterId: 1234,
 		AuthKey:  "1234567",
 		Service:  "test",
 	}

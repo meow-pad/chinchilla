@@ -1,6 +1,7 @@
 package option
 
 import (
+	"encoding/binary"
 	"github.com/meow-pad/chinchilla/handler"
 	"github.com/meow-pad/chinchilla/transfer/selector"
 	"github.com/meow-pad/persian/frame/pnet/tcp/session"
@@ -13,6 +14,7 @@ import (
 
 func NewOptions(opts ...Option) *Options {
 	options := &Options{
+		ReceiverCodecByteOrder:          binary.BigEndian,
 		UnregisteredSenderExpiration:    20_000,
 		RegisteredSenderExpiration:      30_000,
 		CleanSenderSessionCacheInterval: 30 * time.Second,
@@ -48,6 +50,8 @@ type Options struct {
 	ReceiverServerProtoAddr string // setting
 	// 服务器选项
 	ReceiverServerOptions []ws.Option // setting
+	// 编解码字节序
+	ReceiverCodecByteOrder binary.ByteOrder
 
 	// 为登录过期时间，单位毫秒
 	UnregisteredSenderExpiration int64
