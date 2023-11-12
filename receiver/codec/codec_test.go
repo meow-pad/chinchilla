@@ -1,7 +1,7 @@
 package codec
 
 import (
-	"encoding/binary"
+	"github.com/meow-pad/chinchilla/proto/receiver/pb"
 	"github.com/stretchr/testify/require"
 	"math/rand"
 	"reflect"
@@ -13,28 +13,55 @@ func _getObjectValue(ptr any) any {
 	return ptrValue.Elem().Interface()
 }
 
-func TestCodec_Req(t *testing.T) {
+func TestCodec_Message(t *testing.T) {
 	should := require.New(t)
-	handshakeReq := &HandshakeReq{
+	msg := pb.HandshakeReq{
 		RouterId: 1234,
 		AuthKey:  "1234567",
 		Service:  "test",
 	}
+	size := msg.XXX_Size()
+	buf := make([]byte, size)
+	buf1 := buf[:0]
+	var err error
+	buf1, err = msg.XXX_Marshal(buf1, false)
+	should.Nil(err)
+	msg1 := &pb.HandshakeReq{}
+	err = msg1.XXX_Unmarshal(buf1)
+	should.Nil(err)
+}
+
+func TestCodec_Req(t *testing.T) {
+	should := require.New(t)
+	handshakeReq := &HandshakeReq{
+		pb.HandshakeReq{
+			RouterId: 1234,
+			AuthKey:  "1234567",
+			Service:  "test",
+		},
+	}
 	heartbeatReq := &HeartbeatReq{
-		Payload: []byte{1, 2, 3, 4, 5},
+		pb.HeartbeatReq{
+			Payload: []byte{1, 2, 3, 4, 5},
+		},
 	}
 	messageReq := &MessageReq{
-		Service: "test001",
-		Payload: []byte{1, 2, 3, 4, 5},
+		pb.MessageReq{
+			Service: "test001",
+			Payload: []byte{1, 2, 3, 4, 5},
+		},
 	}
-	messages := []any{handshakeReq, heartbeatReq, messageReq}
-	cCodec := ClientCodec{byteOrder: binary.LittleEndian}
-	sCodec := ServerCodec{byteOrder: binary.LittleEndian}
+	messages := []Message{handshakeReq, heartbeatReq, messageReq}
+	cCodec := ClientCodec{}
+	sCodec := ServerCodec{}
 	for _, msg := range messages {
 		data, err := cCodec.Encode(msg)
 		should.Nil(err)
-		dMsg, err := sCodec.Decode(data)
+		dData, err := sCodec.Decode(data)
 		should.Nil(err)
+		// 为了保证最后比较相等能一致，这里也做一遍
+		dMsg := dData.(Message)
+		_, _ = dMsg.XXX_Marshal(make([]byte, 0, dMsg.XXX_Size()), false)
 		// 将原字节乱序
 		rand.Shuffle(len(data), func(i, j int) {
 			data[i], data[j] = data[j], data[i]
@@ -46,24 +73,33 @@ func TestCodec_Req(t *testing.T) {
 func TestCodec_Res(t *testing.T) {
 	should := require.New(t)
 	handshakeRes := &HandshakeRes{
-		Code: 123,
+		pb.HandshakeRes{
+			Code: 123,
+		},
 	}
 	heartbeatRes := &HeartbeatRes{
-		Code:    123,
-		Payload: []byte{1, 2, 3, 4, 5},
+		pb.HeartbeatRes{
+			Code:    123,
+			Payload: []byte{1, 2, 3, 4, 5},
+		},
 	}
 	messageRes := &MessageRes{
-		Code:    123,
-		Payload: []byte{1, 2, 3, 4, 5},
+		pb.MessageRes{
+			Code:    123,
+			Payload: []byte{1, 2, 3, 4, 5},
+		},
 	}
 	messages := []any{handshakeRes, heartbeatRes, messageRes}
-	cCodec := ClientCodec{byteOrder: binary.LittleEndian}
-	sCodec := ServerCodec{byteOrder: binary.LittleEndian}
+	cCodec := ClientCodec{}
+	sCodec := ServerCodec{}
 	for _, msg := range messages {
 		data, err := sCodec.Encode(msg)
 		should.Nil(err)
-		dMsg, err := cCodec.Decode(data)
+		dData, err := cCodec.Decode(data)
 		should.Nil(err)
+		// 为了保证最后比较相等能一致，这里也做一遍
+		dMsg := dData.(Message)
+		_, _ = dMsg.XXX_Marshal(make([]byte, 0, dMsg.XXX_Size()), false)
 		// 将原字节乱序
 		rand.Shuffle(len(data), func(i, j int) {
 			data[i], data[j] = data[j], data[i]

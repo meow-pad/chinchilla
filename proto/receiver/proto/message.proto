@@ -1,0 +1,32 @@
+syntax = "proto3";
+
+option go_package = "proto/receiver/pb";
+
+message HandshakeReq {
+  uint64 routerId = 1;
+  string authKey = 2;
+  string service = 3;
+}
+
+message HandshakeRes {
+  uint32 code = 1;
+}
+
+message HeartbeatReq {
+  bytes payload = 1;
+}
+
+message HeartbeatRes {
+  uint32 code = 1;
+  bytes payload = 2;
+}
+
+message MessageReq {
+  string service = 1;
+  bytes payload = 2;
+}
+
+message MessageRes {
+  uint32 code = 1;
+  bytes payload = 2;
+}
