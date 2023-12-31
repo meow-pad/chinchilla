@@ -20,7 +20,7 @@ type CompositeSelector struct {
 
 func (selector *CompositeSelector) Select(routerId uint64) (string, error) {
 	if len(selector.infoArr) <= 0 {
-		return "", ErrEmptyInstances
+		return "", common.ErrEmptyInstances
 	}
 	for _, _selector := range selector.selectors {
 		id, err := _selector.Select(routerId)
