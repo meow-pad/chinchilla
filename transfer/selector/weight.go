@@ -18,14 +18,14 @@ type WeightSelector struct {
 func (selector *WeightSelector) Select(routerId uint64) (string, error) {
 	instLen := len(selector.infoArr)
 	if instLen <= 0 {
-		return "", ErrEmptyInstances
+		return "", common.ErrEmptyInstances
 	}
 	if instLen == 1 {
-		return selector.infoArr[0].InstanceId, nil
+		return selector.infoArr[0].ServiceId(), nil
 	}
 	r := rand.Intn(selector.weights[instLen-1]) + 1
 	i := sort.SearchInts(selector.weights, r)
-	return selector.infoArr[i].InstanceId, nil
+	return selector.infoArr[i].ServiceId(), nil
 }
 
 func (selector *WeightSelector) Update(infoArr []common.Info) {

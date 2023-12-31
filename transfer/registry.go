@@ -8,7 +8,6 @@ import (
 	"github.com/meow-pad/persian/frame/plog"
 	"github.com/meow-pad/persian/frame/plog/pfield"
 	"github.com/meow-pad/persian/frame/pservice/name"
-	"github.com/meow-pad/persian/utils/json"
 	"github.com/nacos-group/nacos-sdk-go/v2/common/constant"
 	"github.com/nacos-group/nacos-sdk-go/v2/model"
 	"github.com/nacos-group/nacos-sdk-go/v2/vo"
@@ -100,12 +99,19 @@ func (registry *Registry) SubscribeService(srv string) error {
 		return nil
 	}
 	params := &vo.SubscribeParam{
-		Clusters:    []string{registry.appInfo.Cluster()},
+		//Clusters:    []string{registry.appInfo.Cluster()},
 		ServiceName: srv,
 		GroupName:   registry.appInfo.EnvName(),
 		SubscribeCallback: func(instances []model.Instance, err error) {
-			plog.Debug("on services changed:", pfield.String("instances", json.ToString(instances)))
-			registry.transfer.UpdateInstances(srv, instances)
+			cluster := registry.appInfo.Cluster()
+			cInstances := make([]model.Instance, 0, len(instances))
+			for _, inst := range instances {
+				if inst.ClusterName == cluster {
+					cInstances = append(cInstances, inst)
+				}
+			}
+			plog.Debug("on services changed:", pfield.JsonString("instances", cInstances))
+			registry.transfer.UpdateInstances(srv, cInstances)
 		},
 	}
 	err := registry.naming.Subscribe(params)

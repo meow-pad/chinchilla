@@ -2,9 +2,11 @@ package gateway
 
 import (
 	"context"
+	"fmt"
 	"github.com/meow-pad/chinchilla/option"
 	"github.com/meow-pad/chinchilla/receiver"
 	"github.com/meow-pad/chinchilla/transfer"
+	"github.com/meow-pad/chinchilla/utils/gopool"
 	"github.com/meow-pad/persian/frame/pboot"
 	"github.com/meow-pad/persian/frame/pservice/cache"
 	"github.com/meow-pad/persian/utils/timewheel"
@@ -53,12 +55,16 @@ type Gateway struct {
 }
 
 func (gw *Gateway) init() error {
+	if gw.options.GoroutinePool == nil {
+		return fmt.Errorf("less GoroutinePool in options")
+	}
+	goPool := gopool.NewGoPool(gw.options.GoroutinePool)
 	var err error
-	gw.transfer, err = transfer.NewTransfer(gw.appInfo, gw.secTimer, gw.cache, gw.options)
+	gw.transfer, err = transfer.NewTransfer(gw.appInfo, gw.secTimer, gw.cache, goPool, gw.options)
 	if err != nil {
 		return err
 	}
-	gw.receiver, err = receiver.NewReceiver(gw.transfer, gw.options)
+	gw.receiver, err = receiver.NewReceiver(gw.transfer, goPool, gw.options)
 	if err != nil {
 		return err
 	}

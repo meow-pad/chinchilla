@@ -5,15 +5,17 @@ import (
 	"github.com/meow-pad/chinchilla/option"
 	"github.com/meow-pad/chinchilla/receiver/codec"
 	"github.com/meow-pad/chinchilla/transfer"
+	"github.com/meow-pad/chinchilla/utils/gopool"
 	"github.com/meow-pad/persian/errdef"
 	"github.com/meow-pad/persian/frame/pnet/utils"
 	ws "github.com/meow-pad/persian/frame/pnet/ws/server"
 	"github.com/pkg/errors"
 )
 
-func NewReceiver(transfer *transfer.Transfer, options *option.Options) (*Receiver, error) {
+func NewReceiver(transfer *transfer.Transfer, goPool *gopool.GoPool, options *option.Options) (*Receiver, error) {
 	srv := &Receiver{
 		Transfer: transfer,
+		GoPool:   goPool,
 		Options:  options,
 	}
 	err := srv.init("gs-receiver")
@@ -25,6 +27,7 @@ func NewReceiver(transfer *transfer.Transfer, options *option.Options) (*Receive
 
 type Receiver struct {
 	Transfer *transfer.Transfer
+	GoPool   *gopool.GoPool
 	Options  *option.Options
 
 	inner *ws.Server

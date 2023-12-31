@@ -1,12 +1,7 @@
 package selector
 
 import (
-	"errors"
 	"github.com/meow-pad/chinchilla/transfer/common"
-)
-
-var (
-	ErrEmptyInstances = errors.New("empty service infoArr")
 )
 
 type Selector interface {
@@ -15,7 +10,7 @@ type Selector interface {
 	//  @param service
 	//  @param routerId
 	//  @return string 有数据但选不出来时，该值为空字符串
-	//  @return error 如果实例数组本就为空，则返回 ErrEmptyInstances
+	//  @return error 如果实例数组本就为空，则返回 common.ErrEmptyInstances
 	//
 	Select(routerId uint64) (string, error)
 

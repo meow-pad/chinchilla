@@ -4,7 +4,9 @@ import (
 	"context"
 	"github.com/meow-pad/chinchilla/option"
 	"github.com/meow-pad/chinchilla/transfer/codec"
+	"github.com/meow-pad/chinchilla/transfer/router"
 	"github.com/meow-pad/chinchilla/transfer/selector"
+	"github.com/meow-pad/chinchilla/utils/gopool"
 	"github.com/meow-pad/persian/frame/pboot"
 	"github.com/meow-pad/persian/frame/plog"
 	"github.com/meow-pad/persian/frame/plog/pfield"
@@ -19,12 +21,14 @@ func NewTransfer(
 	appInfo pboot.AppInfo,
 	secTimer *timewheel.TimeWheel,
 	cache *cache.Cache,
+	goPool *gopool.GoPool,
 	options *option.Options,
 ) (*Transfer, error) {
 	transfer := &Transfer{
 		AppInfo:  appInfo,
 		Options:  options,
 		SecTimer: secTimer,
+		GoPool:   goPool,
 		Cache:    cache,
 	}
 	err := transfer.init()
@@ -39,9 +43,11 @@ type Transfer struct {
 	Options  *option.Options
 	SecTimer *timewheel.TimeWheel
 	Cache    *cache.Cache
+	GoPool   *gopool.GoPool
 
 	registry      *Registry
 	selector      selector.Selector
+	router        router.Router
 	executor      *worker.FixedWorkerPool
 	clientMgrMap  map[string]*Manager
 	cleanTask     *timewheel.Task
@@ -59,6 +65,11 @@ func (transfer *Transfer) init() (err error) {
 	} else {
 		transfer.selector = options.ServiceSelector
 	}
+	if options.ServiceRouter == nil {
+		transfer.router = &router.CommonRouter{}
+	} else {
+		transfer.router = options.ServiceRouter
+	}
 	if transfer.executor, err = worker.NewFixedWorkerPool(
 		options.MessageExecutorWorkerNum,
 		options.MessageExecutorQueueLength,
@@ -74,7 +85,7 @@ func (transfer *Transfer) Start(ctx context.Context) error {
 	transfer.clientMgrMap = make(map[string]*Manager)
 	options := transfer.Options
 	for _, srvName := range options.RegistryServiceNames {
-		if srvManager, sErr := NewManager(transfer, srvName, clientCodec, transfer.selector); sErr != nil {
+		if srvManager, sErr := NewManager(transfer, srvName, clientCodec); sErr != nil {
 			return sErr
 		} else {
 			transfer.clientMgrMap[srvName] = srvManager
@@ -153,7 +164,7 @@ func (transfer *Transfer) cleanExpiredSessions() {
 			local.Remove(key)
 		}
 	}, false); err != nil {
-		plog.Error("submit clean-expired-session-task error:", pfield.Error(err))
+		plog.Error("submit clean-expired-serverSession-task error:", pfield.Error(err))
 	}
 }
 

@@ -88,7 +88,7 @@ func (remoteSrv *Remote) UpdateInfo(srvInst common.Info) error {
 	if remoteSrv.state.Load() == StateStopped {
 		return service.ErrStoppedInstance
 	}
-	if remoteSrv.info.InstanceId != srvInst.InstanceId || remoteSrv.info.Ip != srvInst.Ip || remoteSrv.info.Port != srvInst.Port {
+	if remoteSrv.info.ServiceId() != srvInst.ServiceId() || remoteSrv.info.Ip != srvInst.Ip || remoteSrv.info.Port != srvInst.Port {
 		plog.Warn("invalid service instance:",
 			pfield.String("old", json.ToString(remoteSrv.info)),
 			pfield.String("new", json.ToString(remoteSrv.info)))
@@ -239,7 +239,7 @@ func (remoteSrv *Remote) handshake() {
 		Id:        appInfo.Id(), // 当前服务Id
 		AuthKey:   options.TransferServiceAuthKey,
 		Service:   remoteSrv.info.ServiceName, // 对方服务名
-		ServiceId: remoteSrv.info.InstanceId,  // 对方实例Id
+		ServiceId: remoteSrv.info.ServiceId(), // 对方实例Id
 	})
 }
 
@@ -269,17 +269,19 @@ func (remoteSrv *Remote) KeepAlive() bool {
 	case StateStopped:
 		return false
 	default:
-		if remoteSrv.inner.IsClosed() {
-			err := remoteSrv.Connect()
-			if err != nil {
-				plog.Error("reconnect error:", pfield.Error(err))
-			}
-		} else {
-			if !remoteSrv.certified.Load() {
-				remoteSrv.handshake()
+		if remoteSrv.inner != nil {
+			if remoteSrv.inner.IsClosed() {
+				err := remoteSrv.Connect()
+				if err != nil {
+					plog.Error("reconnect error:", pfield.Error(err))
+				}
 			} else {
-				// 连接正常则发送心跳
-				remoteSrv.inner.SendMessage(codec.HeartbeatSReq{})
+				if !remoteSrv.certified.Load() {
+					remoteSrv.handshake()
+				} else {
+					// 连接正常则发送心跳
+					remoteSrv.inner.SendMessage(codec.HeartbeatSReq{})
+				}
 			}
 		}
 	} // end of switch

@@ -3,10 +3,12 @@ package option
 import (
 	"encoding/binary"
 	"github.com/meow-pad/chinchilla/handler"
+	"github.com/meow-pad/chinchilla/transfer/router"
 	"github.com/meow-pad/chinchilla/transfer/selector"
 	"github.com/meow-pad/persian/frame/pnet/tcp/session"
 	ws "github.com/meow-pad/persian/frame/pnet/ws/server"
 	"github.com/meow-pad/persian/frame/pservice/name"
+	"github.com/meow-pad/persian/utils/gopool"
 	"github.com/meow-pad/persian/utils/runtime"
 	"github.com/nacos-group/nacos-sdk-go/v2/common/constant"
 	"time"
@@ -110,6 +112,8 @@ type Options struct {
 	NamingServiceUsername string // setting
 	NamingServicePassword string // setting
 
+	// 协程池
+	GoroutinePool *gopool.GoroutinePool // setting
 	// 关注的服务名
 	RegistryServiceNames []string // setting
 	// 本地会话上下文
@@ -118,6 +122,8 @@ type Options struct {
 	LocalMessageHandler map[string]handler.MessageHandler // setting
 	// 服务选择器
 	ServiceSelector selector.Selector // 默认值为cache和wrr的组合
+	// 服务路由
+	ServiceRouter router.Router
 }
 
 type Option func(*Options)
@@ -274,6 +280,13 @@ func WithNamingServicePassword(value string) Option {
 		options.NamingServicePassword = value
 	}
 }
+
+func WithGoroutinePool(value *gopool.GoroutinePool) Option {
+	return func(options *Options) {
+		options.GoroutinePool = value
+	}
+}
+
 func WithRegistryServiceNames(value []string) Option {
 	return func(options *Options) {
 		options.RegistryServiceNames = value
@@ -295,5 +308,11 @@ func WithLocalMessageHandler(value map[string]handler.MessageHandler) Option {
 func WithServiceSelector(value selector.Selector) Option {
 	return func(options *Options) {
 		options.ServiceSelector = value
+	}
+}
+
+func WithServiceRouter(value router.Router) Option {
+	return func(options *Options) {
+		options.ServiceRouter = value
 	}
 }

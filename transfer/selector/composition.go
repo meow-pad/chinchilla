@@ -37,6 +37,7 @@ func (selector *CompositeSelector) Select(routerId uint64) (string, error) {
 }
 
 func (selector *CompositeSelector) Update(infoArr []common.Info) {
+	selector.infoArr = make([]common.Info, len(infoArr))
 	copy(selector.infoArr, infoArr)
 	for _, _selector := range selector.selectors {
 		_selector.Update(infoArr)

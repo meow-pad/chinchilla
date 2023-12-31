@@ -4,6 +4,7 @@ import (
 	rcodec "github.com/meow-pad/chinchilla/receiver/codec"
 	"github.com/meow-pad/chinchilla/receiver/context"
 	tcodec "github.com/meow-pad/chinchilla/transfer/codec"
+	"github.com/meow-pad/chinchilla/transfer/common"
 	"github.com/meow-pad/persian/frame/plog"
 	"github.com/meow-pad/persian/frame/plog/pfield"
 	"github.com/meow-pad/persian/frame/pnet/tcp/session"
@@ -13,7 +14,7 @@ import (
 
 type listener struct {
 	manager       *Manager
-	handleMessage func(msg any)
+	handleMessage func(session session.Session, msg any)
 }
 
 func (listener *listener) OnOpened(session session.Session) {
@@ -23,13 +24,13 @@ func (listener *listener) OnClosed(session session.Session) {
 }
 
 func (listener *listener) OnReceive(session session.Session, msg any, msgLen int) (err error) {
-	listener.handleMessage(msg)
+	listener.handleMessage(session, msg)
 	return
 }
 
 func (listener *listener) OnReceiveMulti(session session.Session, msgArr []any, totalLen int) (err error) {
 	for _, msg := range msgArr {
-		listener.handleMessage(msg)
+		listener.handleMessage(session, msg)
 	}
 	return
 }
@@ -50,7 +51,7 @@ func getSessionFromGoLocal(local *worker.GoroutineLocal, connId uint64) session.
 	}
 	sess := value.(session.Session)
 	if sess == nil {
-		plog.Error("invalid session value", pfield.Uint64("conn", connId))
+		plog.Error("invalid serverSession value", pfield.Uint64("conn", connId))
 		return nil
 	}
 	return sess
@@ -62,7 +63,9 @@ func (listener *listener) handleMessageRes(res *tcodec.MessageSRes) {
 		if sess == nil {
 			return
 		}
-		sess.SendMessage(&rcodec.MessageRes{Payload: res.Payload})
+		rRes := &rcodec.MessageRes{}
+		rRes.Payload = res.Payload
+		sess.SendMessage(rRes)
 	})
 }
 
@@ -72,20 +75,22 @@ func (listener *listener) handleRegisterRes(res *tcodec.RegisterSRes) {
 		if sess == nil {
 			return
 		}
-		if res.Code == tcodec.ErrCodeSuccess {
+		if res.Code == common.ErrCodeSuccess {
 			ctx := sess.Context()
 			if ctx == nil {
-				plog.Error("nil session context")
+				plog.Error("nil serverSession context")
 			} else {
 				senderCtx := ctx.(context.SenderContext)
 				if senderCtx == nil {
-					plog.Error("invalid session context")
+					plog.Error("invalid serverSession context")
 				} else {
 					senderCtx.SetRegistered(true)
 				}
 			} // end of else
 		} // end of if
-		sess.SendMessage(&rcodec.MessageRes{Payload: res.Payload})
+		rRes := &rcodec.MessageRes{}
+		rRes.Payload = res.Payload
+		sess.SendMessage(rRes)
 	})
 }
 
@@ -97,11 +102,36 @@ func (listener *listener) handleUnregisterRes(res *tcodec.UnregisterSRes) {
 		}
 		// 关闭连接
 		if err := sess.Close(); err != nil {
-			plog.Error("close session error:", pfield.Error(err))
+			plog.Error("close serverSession error:", pfield.Error(err))
 		} else {
 			local.Remove(res.ConnId)
 		}
 	})
+}
+
+func (listener *listener) handleMessageRouter(session session.Session, res *tcodec.MessageRouter) {
+	// 注意，这里提交到池子，会导致消息处理顺序变得无序，有要求时需要修改
+	err := listener.manager.transfer.GoPool.Submit(func() {
+		var err any
+		defer func() {
+			if err == nil {
+				err = recover()
+			}
+			if err != nil {
+				plog.Error("route message error:",
+					pfield.Int16("routerType", res.RouterType),
+					pfield.String("routerId", res.RouterId),
+					pfield.Any("error", err))
+			}
+		}()
+		err = listener.manager.Route(res.RouterType, res.RouterId, res.Payload)
+	})
+	if err != nil {
+		plog.Error("submit router task error:",
+			pfield.Int16("routerType", res.RouterType),
+			pfield.String("routerId", res.RouterId),
+			pfield.Error(err))
+	}
 }
 
 // newLocalListener
@@ -122,10 +152,12 @@ type localListener struct {
 	*listener
 }
 
-func (listener *localListener) handleMessage(msg any) {
+func (listener *localListener) handleMessage(session session.Session, msg any) {
 	switch res := msg.(type) {
 	case *tcodec.MessageSRes:
 		listener.handleMessageRes(res)
+	case *tcodec.MessageRouter:
+		listener.handleMessageRouter(session, res)
 	case *tcodec.RegisterSRes:
 		listener.handleRegisterRes(res)
 	case *tcodec.UnregisterSRes:
@@ -172,10 +204,12 @@ func (listener *remoteListener) OnClosed(session session.Session) {
 	}
 }
 
-func (listener *remoteListener) handleMessage(msg any) {
+func (listener *remoteListener) handleMessage(session session.Session, msg any) {
 	switch res := msg.(type) {
 	case *tcodec.MessageSRes:
 		listener.handleMessageRes(res)
+	case *tcodec.MessageRouter:
+		listener.handleMessageRouter(session, res)
 	case *tcodec.RegisterSRes:
 		listener.handleRegisterRes(res)
 	case *tcodec.UnregisterSRes:
@@ -185,7 +219,7 @@ func (listener *remoteListener) handleMessage(msg any) {
 	case *tcodec.HandshakeRes:
 		listener.handleHandshakeRes(res)
 	case *tcodec.SegmentMsg:
-		listener.handleSegmentMsg(res)
+		listener.handleSegmentMsg(session, res)
 	default:
 		plog.Error("unknown message type:", pfield.String("msgType", reflect.TypeOf(msg).String()))
 	}
@@ -197,7 +231,7 @@ func (listener *remoteListener) handleHeartbeatRes(res *tcodec.HeartbeatSRes) {
 
 func (listener *remoteListener) handleHandshakeRes(res *tcodec.HandshakeRes) {
 	switch res.Code {
-	case tcodec.ErrCodeSuccess:
+	case common.ErrCodeSuccess:
 		// 握手成功
 		listener.client.onHandshake()
 	default:
@@ -216,7 +250,7 @@ func (listener *remoteListener) handleHandshakeRes(res *tcodec.HandshakeRes) {
 	}
 }
 
-func (listener *remoteListener) handleSegmentMsg(msg *tcodec.SegmentMsg) {
+func (listener *remoteListener) handleSegmentMsg(session session.Session, msg *tcodec.SegmentMsg) {
 	if msg.Seq == 0 {
 		if listener.client.segmentFrameBuf != nil {
 			plog.Error("last segmentation message did not complete")
@@ -250,6 +284,6 @@ func (listener *remoteListener) handleSegmentMsg(msg *tcodec.SegmentMsg) {
 			plog.Error("decode segmentation message error:", pfield.Error(err))
 			return
 		}
-		listener.handleMessage(sMsg)
+		listener.handleMessage(session, sMsg)
 	}
 }

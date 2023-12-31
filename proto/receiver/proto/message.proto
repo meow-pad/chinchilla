@@ -3,7 +3,7 @@ syntax = "proto3";
 option go_package = "proto/receiver/pb";
 
 message HandshakeReq {
-  uint64 routerId = 1;
+  string routerId = 1;
   string authKey = 2;
   string service = 3;
 }

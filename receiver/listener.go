@@ -40,18 +40,21 @@ func (listener *Listener) OnClosed(session session.Session) {
 }
 
 func (listener *Listener) OnReceive(sess session.Session, msg any, msgLen int) (err error) {
+	plog.Debug("receive message:", pfield.JsonString("msg", msg))
 	listener.handleMessage(sess, msg)
 	return nil
 }
 
 func (listener *Listener) OnReceiveMulti(sess session.Session, msgArr []any, totalLen int) (err error) {
 	for _, msg := range msgArr {
+		plog.Debug("(chinchilla) receive message:", pfield.JsonString("msg", msg))
 		listener.handleMessage(sess, msg)
 	}
 	return
 }
 
 func (listener *Listener) OnSend(sess session.Session, msg any, msgLen int) (err error) {
+	plog.Debug("(chinchilla) send message:", pfield.JsonString("msg", msg))
 	return
 }
 
@@ -85,7 +88,9 @@ func (listener *Listener) handleMessageReq(sess session.Session, req *codec.Mess
 		}
 		srvService := sessCtx.GetService(reqService)
 		if srvService == nil {
-			sess.SendMessage(&codec.MessageRes{Code: codec.ErrCodeHandshakeFirst})
+			res := &codec.MessageRes{}
+			res.Code = codec.ErrCodeHandshakeFirst
+			sess.SendMessage(res)
 			return
 		}
 		if srvService.IsStopped() {
@@ -126,7 +131,9 @@ func (listener *Listener) handleHeartbeatReq(sess session.Session, req *codec.He
 		if sessCtx.IsRegistered() {
 			_, dfService := sessCtx.GetDefaultService()
 			if dfService == nil {
-				sess.SendMessage(&codec.HeartbeatRes{Code: codec.ErrCodeHandshakeFirst})
+				res := &codec.HeartbeatRes{}
+				res.Code = codec.ErrCodeHandshakeFirst
+				sess.SendMessage(res)
 				return
 			}
 			if dfService.IsStopped() {
@@ -146,7 +153,9 @@ func (listener *Listener) handleHeartbeatReq(sess session.Session, req *codec.He
 				plog.Error("send message to service error:", pfield.Error(err))
 			}
 		} else {
-			sess.SendMessage(&codec.HeartbeatRes{Code: codec.ErrCodeLoginFirst})
+			res := &codec.HeartbeatRes{}
+			res.Code = codec.ErrCodeLoginFirst
+			sess.SendMessage(res)
 			return
 		}
 	})
@@ -155,9 +164,18 @@ func (listener *Listener) handleHeartbeatReq(sess session.Session, req *codec.He
 func (listener *Listener) handleHandshakeReq(sess session.Session, req *codec.HandshakeReq) {
 	listener.server.Transfer.Forward(int64(sess.Id()), func(local *worker.GoroutineLocal) {
 		options := listener.server.Options
+		err := req.InitRouterId()
+		if err != nil {
+			res := &codec.HandshakeRes{}
+			res.Code = codec.ErrCodeInvalidRouterId
+			sess.SendMessage(res)
+			return
+		}
 		// 校验
 		if req.AuthKey != options.ReceiverHandshakeAuthKey {
-			sess.SendMessage(&codec.HandshakeRes{Code: codec.ErrCodeInvalidAuthKey})
+			res := &codec.HandshakeRes{}
+			res.Code = codec.ErrCodeInvalidAuthKey
+			sess.SendMessage(res)
 			return
 		}
 		sessCtx := coding.Cast[*SenderContext](sess.Context())
@@ -171,27 +189,42 @@ func (listener *Listener) handleHandshakeReq(sess session.Session, req *codec.Ha
 		srvCli := sessCtx.GetService(req.Service)
 		if srvCli != nil {
 			// 又重握手了一遍
-			sess.SendMessage(&codec.HandshakeRes{Code: codec.ErrCodeSuccess})
+			res := &codec.HandshakeRes{}
+			res.Code = codec.ErrCodeSuccess
+			sess.SendMessage(res)
 			return
 		}
 		// 设定需要先到 本地缓存或分布式缓存查询, 有则直接在transfer中找到对应的instanceId的client
 		// 缓存中没有则到transfer去select一个client
 		manager := listener.server.Transfer.GetServiceManager(req.Service)
 		if manager == nil {
-			sess.SendMessage(&codec.HandshakeRes{Code: codec.ErrCodeUnknownService})
+			res := &codec.HandshakeRes{}
+			res.Code = codec.ErrCodeUnknownService
+			sess.SendMessage(res)
 			return
 		} else {
-			srv, err := manager.SelectInstance(req.RouterId)
-			if err != nil {
-				sess.SendMessage(&codec.HandshakeRes{Code: codec.ErrCodeSelectError})
-				return
+			sErr := listener.server.Transfer.GoPool.Submit(func() {
+				srv, sErr := manager.SelectInstance(req.RouterId())
+				if sErr != nil {
+					res := &codec.HandshakeRes{}
+					res.Code = codec.ErrCodeSelectError
+					sess.SendMessage(res)
+					return
+				}
+				if srv == nil {
+					res := &codec.HandshakeRes{}
+					res.Code = codec.ErrCodeLessInstance
+					sess.SendMessage(res)
+					return
+				}
+				sessCtx.SetService(req.Service, srv)
+				res := &codec.HandshakeRes{}
+				res.Code = codec.ErrCodeSuccess
+				sess.SendMessage(res)
+			})
+			if sErr != nil {
+				plog.Error("submit SelectInstance task in HandshakeReq error:", pfield.Error(sErr))
 			}
-			if srv == nil {
-				sess.SendMessage(&codec.HandshakeRes{Code: codec.ErrCodeLessInstance})
-				return
-			}
-			sessCtx.SetService(req.Service, srv)
-			sess.SendMessage(&codec.HandshakeRes{Code: codec.ErrCodeSuccess})
 			return
 		}
 	})

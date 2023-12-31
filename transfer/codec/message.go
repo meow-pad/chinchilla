@@ -7,6 +7,9 @@ const (
 	TypeUnregisterS
 	TypeHeartbeatS
 	TypeMessageS
+	TypeMessageRouter
+	TypeRPCRReq
+	TypeRPCRRes
 )
 
 type SegmentMsg struct {
@@ -66,4 +69,10 @@ type MessageSReq struct {
 type MessageSRes struct {
 	ConnId  uint64
 	Payload []byte
+}
+
+type MessageRouter struct {
+	RouterType int16  // 目标路由类型（0以上为自定义路由类型）
+	RouterId   string // 目标路由标识
+	Payload    []byte
 }

@@ -29,6 +29,20 @@ func ReadUint64Array(byteOrder binary.ByteOrder, buf []byte) (result []uint64, l
 	return
 }
 
+func ReadInt16(byteOrder binary.ByteOrder, buf []byte) (result int16, left []byte, err error) {
+	var ur uint16
+	ur, left, err = ReadUint16(byteOrder, buf)
+	if err != nil {
+		return
+	}
+	result = int16(ur)
+	return
+}
+
+func WriteInt16(byteOrder binary.ByteOrder, data int16, buf []byte) (left []byte, err error) {
+	return WriteUint16(byteOrder, uint16(data), buf)
+}
+
 func ReadUint16(byteOrder binary.ByteOrder, buf []byte) (result uint16, left []byte, err error) {
 	if len(buf) < 2 {
 		return 0, nil, io.ErrShortBuffer
@@ -45,6 +59,24 @@ func WriteUint16(byteOrder binary.ByteOrder, data uint16, buf []byte) (left []by
 	}
 	byteOrder.PutUint16(buf, data)
 	return buf[2:], nil
+}
+
+func ReadUint32(byteOrder binary.ByteOrder, buf []byte) (result uint32, left []byte, err error) {
+	if len(buf) < 4 {
+		return 0, nil, io.ErrShortBuffer
+	}
+	result = byteOrder.Uint32(buf)
+	left = buf[4:]
+	return
+}
+
+func WriteUint32(byteOrder binary.ByteOrder, data uint32, buf []byte) (left []byte, err error) {
+	lenBuf := len(buf)
+	if lenBuf < 4 {
+		return nil, io.ErrShortWrite
+	}
+	byteOrder.PutUint32(buf, data)
+	return buf[4:], nil
 }
 
 func ReadUint64(byteOrder binary.ByteOrder, buf []byte) (result uint64, left []byte, err error) {

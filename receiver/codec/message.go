@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"github.com/gogo/protobuf/proto"
 	"github.com/meow-pad/chinchilla/proto/receiver/pb"
+	"strconv"
 )
 
 const (
@@ -27,6 +28,23 @@ type Message interface {
 
 type HandshakeReq struct {
 	pb.HandshakeReq
+
+	routerId uint64
+}
+
+func (req *HandshakeReq) RouterId() uint64 {
+	return req.routerId
+}
+
+func (req *HandshakeReq) InitRouterId() error {
+	if len(req.HandshakeReq.RouterId) > 0 {
+		rId, err := strconv.ParseUint(req.HandshakeReq.RouterId, 10, 64)
+		if err != nil {
+			return err
+		}
+		req.routerId = rId
+	}
+	return nil
 }
 
 func (req *HandshakeReq) Type() uint8 {
@@ -37,7 +55,7 @@ type HandshakeRes struct {
 	pb.HandshakeRes
 }
 
-func (req *HandshakeRes) Type() uint8 {
+func (res *HandshakeRes) Type() uint8 {
 	return TypeHandshake
 }
 
@@ -53,7 +71,7 @@ type HeartbeatRes struct {
 	pb.HeartbeatRes
 }
 
-func (req *HeartbeatRes) Type() uint8 {
+func (res *HeartbeatRes) Type() uint8 {
 	return TypeHeartbeat
 }
 
@@ -69,7 +87,7 @@ type MessageRes struct {
 	pb.MessageRes
 }
 
-func (req *MessageRes) Type() uint8 {
+func (res *MessageRes) Type() uint8 {
 	return TypeMessage
 }
 

@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/binary"
 	"errors"
+	"fmt"
 	"github.com/meow-pad/chinchilla/utils/codec"
 	"io"
 	"reflect"
@@ -24,6 +25,19 @@ func (sCodec *ServerCodec) Encode(msg any) ([]byte, error) {
 		buf[0] = TypeMessageS
 		sCodec.byteOrder.PutUint64(buf[1:], res.ConnId)
 		copy(buf[9:], res.Payload)
+		return buf, nil
+	case *MessageRouter:
+		buf := make([]byte, len(res.Payload)+2+len(res.RouterId)+2+1)
+		buf[0] = TypeMessageRouter
+		left := buf[1:]
+		err := error(nil)
+		if left, err = codec.WriteInt16(sCodec.byteOrder, res.RouterType, left); err != nil {
+			return nil, err
+		}
+		if left, err = codec.WriteString(sCodec.byteOrder, res.RouterId, left); err != nil {
+			return nil, err
+		}
+		copy(left, res.Payload)
 		return buf, nil
 	case *RegisterSRes:
 		buf := make([]byte, len(res.Payload)+18+1)
@@ -63,6 +77,9 @@ func (sCodec *ServerCodec) Encode(msg any) ([]byte, error) {
 		return buf, nil
 	case *SegmentMsg:
 		return encodeSegmentMsg(sCodec.byteOrder, res)
+	case *RpcRReq, *RpcRRes:
+		// 这些消息不可能在server端编码
+		return nil, errors.New("unsupported message in server encoder:" + reflect.TypeOf(msg).String())
 	default:
 		return nil, errors.New("invalid message type:" + reflect.TypeOf(msg).String())
 	}
@@ -84,6 +101,8 @@ func (sCodec *ServerCodec) Decode(in []byte) (any, error) {
 		}
 		req.Payload = bytes.Clone(left)
 		return req, nil
+	case TypeRPCRReq, TypeRPCRRes:
+		return decodeRouterMessage(sCodec.byteOrder, in)
 	case TypeRegisterS:
 		req := &RegisterSReq{}
 		left := in[1:]
@@ -135,6 +154,9 @@ func (sCodec *ServerCodec) Decode(in []byte) (any, error) {
 		return req, nil
 	case TypeSegment:
 		return decodeSegmentMsg(sCodec.byteOrder, in[1:])
+	case TypeMessageRouter:
+		// 这些消息不可能在server端解码
+		return nil, fmt.Errorf("unsupported message in server decoder:%d", msgType)
 	default:
 		return nil, errors.New("invalid message type")
 	}

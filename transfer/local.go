@@ -7,53 +7,98 @@ import (
 	"github.com/meow-pad/chinchilla/transfer/common"
 	"github.com/meow-pad/chinchilla/transfer/service"
 	"github.com/meow-pad/persian/errdef"
+	"github.com/meow-pad/persian/frame/plog"
+	"github.com/meow-pad/persian/frame/plog/pfield"
 	"github.com/meow-pad/persian/frame/pnet/tcp/session"
 	"sync/atomic"
 )
 
-func newLocalSession(manager *Manager,
-	ctxBuilder func(session.Session) (session.Context, error)) (*localSession, error) {
-	sess := &localSession{
-		listener: newLocalListener(manager),
+func newLocalServerSession(local *Local, manager *Manager,
+	ctxBuilder func(session.Session) (session.Context, error)) (*localServerSession, error) {
+	sess := &localServerSession{
+		clientSess: newLocalClientSession(local),
+		listener:   newLocalListener(manager),
 	}
 	ctx, err := ctxBuilder(sess)
 	if err != nil {
 		return nil, err
 	}
-	sess.ctx = ctx
+	_ = sess.BaseSession.Register(ctx)
 	return sess, nil
 }
 
-type localSession struct {
+type localServerSession struct {
 	session.BaseSession
 
-	ctx      session.Context
-	listener *localListener
+	clientSess *localClientSession
+	listener   *localListener
 }
 
-func (sess *localSession) Register(context session.Context) error {
-	return fmt.Errorf("cant register local session context")
+func (sess *localServerSession) Register(context session.Context) error {
+	return fmt.Errorf("cant register local serverSession context")
 }
 
-func (sess *localSession) Connection() session.Conn {
+func (sess *localServerSession) Connection() session.Conn {
 	return nil
 }
 
-func (sess *localSession) Close() error {
+func (sess *localServerSession) Close() error {
 	return nil
 }
 
-func (sess *localSession) IsClosed() bool {
+func (sess *localServerSession) IsClosed() bool {
 	return false
 }
 
-func (sess *localSession) SendMessage(message any) {
-	sess.listener.handleMessage(message)
+func (sess *localServerSession) SendMessage(message any) {
+	sess.listener.handleMessage(sess, message)
 }
 
-func (sess *localSession) SendMessages(messages ...any) {
+func (sess *localServerSession) SendMessages(messages ...any) {
 	for _, msg := range messages {
-		sess.listener.handleMessage(msg)
+		sess.listener.handleMessage(sess, msg)
+	}
+}
+
+func newLocalClientSession(local *Local) *localClientSession {
+	return &localClientSession{
+		local: local,
+	}
+}
+
+type localClientSession struct {
+	session.BaseSession
+
+	local *Local
+}
+
+func (sess *localClientSession) Register(context session.Context) error {
+	return fmt.Errorf("cant register local clientSession context")
+}
+
+func (sess *localClientSession) Connection() session.Conn {
+	return nil
+}
+
+func (sess *localClientSession) Close() error {
+	return nil
+}
+
+func (sess *localClientSession) IsClosed() bool {
+	return false
+}
+
+func (sess *localClientSession) SendMessage(message any) {
+	if err := sess.local.SendMessage(message); err != nil {
+		plog.Error("local client sess send message error:", pfield.Error(err))
+	}
+}
+
+func (sess *localClientSession) SendMessages(messages ...any) {
+	for _, msg := range messages {
+		if err := sess.local.SendMessage(msg); err != nil {
+			plog.Error("local client sess send message error:", pfield.Error(err))
+		}
 	}
 }
 
@@ -73,10 +118,10 @@ func NewLocalService(manager *Manager, info common.Info) (*Local, error) {
 }
 
 type Local struct {
-	manager *Manager
-	info    common.Info
-	session session.Session
-	handler handler.MessageHandler
+	manager       *Manager
+	info          common.Info
+	serverSession session.Session // 这里比较特殊，它是模拟服务接收端的网关会话（非网关内部的服务的会话），这与网关内其他会话概念相反
+	handler       handler.MessageHandler
 
 	stopped atomic.Bool
 }
@@ -87,25 +132,26 @@ func (local *Local) init(manager *Manager, info common.Info) error {
 		return errdef.ErrInvalidParams
 	}
 	if options.LocalContextBuilder == nil {
-		return fmt.Errorf("less local session context builder")
+		return fmt.Errorf("less local serverSession context builder")
 	}
-	sess, err := newLocalSession(local.manager, options.LocalContextBuilder)
+	sess, err := newLocalServerSession(local, manager, options.LocalContextBuilder)
 	if err != nil {
 		return err
 	}
-	msgHandler := options.LocalMessageHandler[info.ServiceName]
+	serviceName := info.Service()
+	msgHandler := options.LocalMessageHandler[serviceName]
 	if msgHandler == nil {
-		return fmt.Errorf("less service(%s) message msgHandler", info.ServiceName)
+		return fmt.Errorf("less service(%s) message msgHandler", serviceName)
 	}
 	local.manager = manager
 	local.info = info
-	local.session = sess
+	local.serverSession = sess
 	local.handler = msgHandler
 	return nil
 }
 
 func (local *Local) UpdateInfo(info common.Info) error {
-	if info.ServiceName != local.info.ServiceName || info.InstanceId != local.info.InstanceId {
+	if info.ServiceName != local.info.ServiceName || info.ServiceId() != local.info.ServiceId() {
 		return errdef.ErrInvalidParams
 	}
 	local.info = info
@@ -127,7 +173,7 @@ func (local *Local) SendMessage(msg any) error {
 	if !local.info.Enable {
 		return service.ErrDisabledService
 	}
-	return local.handler.HandleMessage(local.session, msg)
+	return local.handler.HandleMessage(local.serverSession, msg)
 }
 
 func (local *Local) IsEnable() bool {

@@ -14,7 +14,7 @@ var (
 func NewCodec(msgCodec message.Codec, messageWarningSize int) (codec.Codec, error) {
 	opts := []codec.Option[*codec.LengthOptions]{
 		codec.WithMessageCodec[*codec.LengthOptions](msgCodec),
-		codec.WithByteOrder(binary.LittleEndian),
+		codec.WithByteOrder(MessageCodecByteOrder),
 		codec.WithLengthSize(2),
 		codec.WithMaxDecodedLength[*codec.LengthOptions](math.MaxInt16),
 		codec.WithMaxEncodedLength[*codec.LengthOptions](math.MaxInt16),

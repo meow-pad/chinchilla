@@ -84,7 +84,13 @@ func TestCodec_Res(t *testing.T) {
 		ConnId:  12345,
 		Payload: []byte{1, 2, 3, 4, 5},
 	}
-	messages := []any{segmentMsg, handshakeRes, registerSRes, unregisterSRes, heartbeatSRes, messageSRes}
+	messageRouter := &MessageRouter{
+		RouterType: -123,
+		RouterId:   "abc",
+		Payload:    []byte{1, 2, 3, 4, 5},
+	}
+	messages := []any{segmentMsg, handshakeRes, registerSRes, unregisterSRes,
+		heartbeatSRes, messageSRes, messageRouter}
 	cCodec := ClientCodec{byteOrder: binary.BigEndian}
 	sCodec := ServerCodec{byteOrder: binary.BigEndian}
 	for _, msg := range messages {
