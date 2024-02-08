@@ -1,15 +1,22 @@
 package codec
 
 const (
+	// 默认为服务器间交互消息（transfer为req）
+	// 以S结尾的消息为转发用户相关的消息
+	// 以I结尾的消息为服务间交互消息（service服务实例为req）
+
 	TypeSegment = iota + 1
 	TypeHandshake
 	TypeRegisterS
 	TypeUnregisterS
 	TypeHeartbeatS
 	TypeMessageS
+	TypeBroadcastS
 	TypeMessageRouter
 	TypeRPCRReq
 	TypeRPCRRes
+	TypeServiceInstIReS
+	TypeServiceInstIReq
 )
 
 type SegmentMsg struct {
@@ -24,7 +31,7 @@ type HandshakeReq struct {
 	Service   string   // 目标服务名
 	ServiceId string   // 目标服务ID
 	ConnIds   []uint64 // 已注册连接编号
-	RouterIds []uint64 // 已注册路由编号
+	RouterIds []string // 已注册路由编号
 }
 
 type HandshakeRes struct {
@@ -39,7 +46,7 @@ type RegisterSReq struct {
 type RegisterSRes struct {
 	ConnId   uint64
 	Code     uint16
-	RouterId uint64
+	RouterId string
 	Payload  []byte // 登录结果消息
 }
 
@@ -71,8 +78,24 @@ type MessageSRes struct {
 	Payload []byte
 }
 
+type BroadcastSRes struct {
+	ConnIds []uint64
+	Payload []byte
+}
+
 type MessageRouter struct {
-	RouterType int16  // 目标路由类型（0以上为自定义路由类型）
-	RouterId   string // 目标路由标识
-	Payload    []byte
+	RouterService string // 路由的服务
+	RouterType    int16  // 目标路由类型（0以上为自定义路由类型）
+	RouterId      string // 目标路由标识
+	Payload       []byte
+}
+
+type ServiceInstIReq struct {
+	ServiceName string // 服务名
+}
+
+type ServiceInstIRes struct {
+	Code           uint16
+	ServiceName    string
+	ServiceInstArr []string
 }

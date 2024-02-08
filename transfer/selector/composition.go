@@ -18,7 +18,7 @@ type CompositeSelector struct {
 	infoArr []common.Info
 }
 
-func (selector *CompositeSelector) Select(routerId uint64) (string, error) {
+func (selector *CompositeSelector) Select(routerId string) (string, error) {
 	if len(selector.infoArr) <= 0 {
 		return "", common.ErrEmptyInstances
 	}

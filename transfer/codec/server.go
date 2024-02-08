@@ -19,64 +19,86 @@ type ServerCodec struct {
 }
 
 func (sCodec *ServerCodec) Encode(msg any) ([]byte, error) {
-	switch res := msg.(type) {
+	switch sMsg := msg.(type) {
 	case *MessageSRes:
-		buf := make([]byte, len(res.Payload)+8+1)
+		buf := make([]byte, len(sMsg.Payload)+8+1)
 		buf[0] = TypeMessageS
-		sCodec.byteOrder.PutUint64(buf[1:], res.ConnId)
-		copy(buf[9:], res.Payload)
+		sCodec.byteOrder.PutUint64(buf[1:], sMsg.ConnId)
+		copy(buf[9:], sMsg.Payload)
 		return buf, nil
 	case *MessageRouter:
-		buf := make([]byte, len(res.Payload)+2+len(res.RouterId)+2+1)
+		buf := make([]byte, len(sMsg.Payload)+2+len(sMsg.RouterService)+2+len(sMsg.RouterId)+2+1)
 		buf[0] = TypeMessageRouter
 		left := buf[1:]
 		err := error(nil)
-		if left, err = codec.WriteInt16(sCodec.byteOrder, res.RouterType, left); err != nil {
+		if left, err = codec.WriteString(sCodec.byteOrder, sMsg.RouterService, left); err != nil {
 			return nil, err
 		}
-		if left, err = codec.WriteString(sCodec.byteOrder, res.RouterId, left); err != nil {
+		if left, err = codec.WriteInt16(sCodec.byteOrder, sMsg.RouterType, left); err != nil {
 			return nil, err
 		}
-		copy(left, res.Payload)
+		if left, err = codec.WriteString(sCodec.byteOrder, sMsg.RouterId, left); err != nil {
+			return nil, err
+		}
+		copy(left, sMsg.Payload)
+		return buf, nil
+	case *BroadcastSRes:
+		buf := make([]byte, codec.Uint64ArrayLen(sMsg.ConnIds)+len(sMsg.Payload)+1)
+		buf[0] = TypeBroadcastS
+		left := buf[1:]
+		err := error(nil)
+		if left, err = codec.WriteUint64Array(sCodec.byteOrder, sMsg.ConnIds, left); err != nil {
+			return nil, err
+		}
+		copy(left, sMsg.Payload)
 		return buf, nil
 	case *RegisterSRes:
-		buf := make([]byte, len(res.Payload)+18+1)
+		buf := make([]byte, len(sMsg.Payload)+8+2+2+len(sMsg.RouterId)+1)
 		buf[0] = TypeRegisterS
 		left := buf[1:]
 		err := error(nil)
-		if left, err = codec.WriteUint64(sCodec.byteOrder, res.ConnId, left); err != nil {
+		if left, err = codec.WriteUint64(sCodec.byteOrder, sMsg.ConnId, left); err != nil {
 			return nil, err
 		}
-		if left, err = codec.WriteUint16(sCodec.byteOrder, res.Code, left); err != nil {
+		if left, err = codec.WriteUint16(sCodec.byteOrder, sMsg.Code, left); err != nil {
 			return nil, err
 		}
-		if left, err = codec.WriteUint64(sCodec.byteOrder, res.RouterId, left); err != nil {
+		if left, err = codec.WriteString(sCodec.byteOrder, sMsg.RouterId, left); err != nil {
 			return nil, err
 		}
-		copy(left, res.Payload)
+		copy(left, sMsg.Payload)
 		return buf, nil
 	case *UnregisterSRes:
 		buf := make([]byte, 8+1)
 		buf[0] = TypeUnregisterS
 		left := buf[1:]
 		err := error(nil)
-		if left, err = codec.WriteUint64(sCodec.byteOrder, res.ConnId, left); err != nil {
+		if left, err = codec.WriteUint64(sCodec.byteOrder, sMsg.ConnId, left); err != nil {
 			return nil, err
 		}
 		return buf, nil
 	case *HeartbeatSRes:
-		buf := make([]byte, len(res.Payload)+8+1)
+		buf := make([]byte, len(sMsg.Payload)+8+1)
 		buf[0] = TypeHeartbeatS
-		sCodec.byteOrder.PutUint64(buf[1:], res.ConnId)
-		copy(buf[9:], res.Payload)
+		sCodec.byteOrder.PutUint64(buf[1:], sMsg.ConnId)
+		copy(buf[9:], sMsg.Payload)
 		return buf, nil
 	case *HandshakeRes:
 		buf := make([]byte, 2+1)
 		buf[0] = TypeHandshake
-		sCodec.byteOrder.PutUint16(buf[1:], res.Code)
+		sCodec.byteOrder.PutUint16(buf[1:], sMsg.Code)
+		return buf, nil
+	case *ServiceInstIReq:
+		buf := make([]byte, 2+len(sMsg.ServiceName)+1)
+		buf[0] = TypeServiceInstIReq
+		left := buf[1:]
+		err := error(nil)
+		if left, err = codec.WriteString(sCodec.byteOrder, sMsg.ServiceName, left); err != nil {
+			return nil, err
+		}
 		return buf, nil
 	case *SegmentMsg:
-		return encodeSegmentMsg(sCodec.byteOrder, res)
+		return encodeSegmentMsg(sCodec.byteOrder, sMsg)
 	case *RpcRReq, *RpcRRes:
 		// 这些消息不可能在server端编码
 		return nil, errors.New("unsupported message in server encoder:" + reflect.TypeOf(msg).String())
@@ -148,10 +170,24 @@ func (sCodec *ServerCodec) Decode(in []byte) (any, error) {
 		if req.ConnIds, left, err = codec.ReadUint64Array(sCodec.byteOrder, left); err != nil {
 			return nil, err
 		}
-		if req.RouterIds, left, err = codec.ReadUint64Array(sCodec.byteOrder, left); err != nil {
+		if req.RouterIds, left, err = codec.ReadStringArray(sCodec.byteOrder, left); err != nil {
 			return nil, err
 		}
 		return req, nil
+	case TypeServiceInstIReS:
+		res := &ServiceInstIRes{}
+		left := in[1:]
+		err := error(nil)
+		if res.Code, left, err = codec.ReadUint16(sCodec.byteOrder, left); err != nil {
+			return nil, err
+		}
+		if res.ServiceName, left, err = codec.ReadString(sCodec.byteOrder, left); err != nil {
+			return nil, err
+		}
+		if res.ServiceInstArr, left, err = codec.ReadStringArray(sCodec.byteOrder, left); err != nil {
+			return nil, err
+		}
+		return res, nil
 	case TypeSegment:
 		return decodeSegmentMsg(sCodec.byteOrder, in[1:])
 	case TypeMessageRouter:

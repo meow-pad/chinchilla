@@ -164,13 +164,13 @@ func (listener *Listener) handleHeartbeatReq(sess session.Session, req *codec.He
 func (listener *Listener) handleHandshakeReq(sess session.Session, req *codec.HandshakeReq) {
 	listener.server.Transfer.Forward(int64(sess.Id()), func(local *worker.GoroutineLocal) {
 		options := listener.server.Options
-		err := req.InitRouterId()
-		if err != nil {
-			res := &codec.HandshakeRes{}
-			res.Code = codec.ErrCodeInvalidRouterId
-			sess.SendMessage(res)
-			return
-		}
+		//err := req.InitRouterId()
+		//if err != nil {
+		//	res := &codec.HandshakeRes{}
+		//	res.Code = codec.ErrCodeInvalidRouterId
+		//	sess.SendMessage(res)
+		//	return
+		//}
 		// 校验
 		if req.AuthKey != options.ReceiverHandshakeAuthKey {
 			res := &codec.HandshakeRes{}

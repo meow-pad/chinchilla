@@ -141,9 +141,9 @@ func (manager *Manager) KeepClientsAlive() {
 //	@param routerId
 //	@return Service
 //	@return error
-func (manager *Manager) SelectInstance(routerId uint64) (service.Service, error) {
+func (manager *Manager) SelectInstance(routerId string) (service.Service, error) {
 	defer coding.CachePanicError("select service instance error", nil,
-		pfield.Uint64("routerId", routerId))
+		pfield.String("routerId", routerId))
 	instId, err := manager.transfer.selector.Select(routerId)
 	if err != nil && !errors.Is(err, common.ErrEmptyInstances) {
 		return nil, err

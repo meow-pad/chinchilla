@@ -9,4 +9,5 @@ const (
 	ErrCodeInnerError
 	ErrCodeAuthFailed
 	ErrCodeRouteError
+	ErrCodeNoService
 )

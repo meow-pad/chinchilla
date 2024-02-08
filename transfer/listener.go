@@ -5,6 +5,7 @@ import (
 	"github.com/meow-pad/chinchilla/receiver/context"
 	tcodec "github.com/meow-pad/chinchilla/transfer/codec"
 	"github.com/meow-pad/chinchilla/transfer/common"
+	"github.com/meow-pad/chinchilla/transfer/service"
 	"github.com/meow-pad/persian/frame/plog"
 	"github.com/meow-pad/persian/frame/plog/pfield"
 	"github.com/meow-pad/persian/frame/pnet/tcp/session"
@@ -69,6 +70,20 @@ func (listener *listener) handleMessageRes(res *tcodec.MessageSRes) {
 	})
 }
 
+func (listener *listener) handleBroadcastRes(res *tcodec.BroadcastSRes) {
+	for _, connId := range res.ConnIds {
+		listener.manager.transfer.Forward(int64(connId), func(local *worker.GoroutineLocal) {
+			sess := getSessionFromGoLocal(local, connId)
+			if sess == nil {
+				return
+			}
+			rRes := &rcodec.MessageRes{}
+			rRes.Payload = res.Payload
+			sess.SendMessage(rRes)
+		})
+	}
+}
+
 func (listener *listener) handleRegisterRes(res *tcodec.RegisterSRes) {
 	listener.manager.transfer.Forward(int64(res.ConnId), func(local *worker.GoroutineLocal) {
 		sess := getSessionFromGoLocal(local, res.ConnId)
@@ -124,7 +139,12 @@ func (listener *listener) handleMessageRouter(session session.Session, res *tcod
 					pfield.Any("error", err))
 			}
 		}()
-		err = listener.manager.Route(res.RouterType, res.RouterId, res.Payload)
+		srvManager := listener.manager.transfer.GetServiceManager(res.RouterService)
+		if srvManager != nil {
+			err = srvManager.Route(res.RouterType, res.RouterId, res.Payload)
+		} else {
+			plog.Warn("unknown router service", pfield.String("routerSrv", res.RouterService))
+		}
 	})
 	if err != nil {
 		plog.Error("submit router task error:",
@@ -132,6 +152,28 @@ func (listener *listener) handleMessageRouter(session session.Session, res *tcod
 			pfield.String("routerId", res.RouterId),
 			pfield.Error(err))
 	}
+}
+
+func (listener *listener) handleServiceInstIReq(session session.Session, iReq *tcodec.ServiceInstIReq) {
+	srvManager := listener.manager.transfer.GetServiceManager(iReq.ServiceName)
+	if srvManager == nil {
+		session.SendMessage(&tcodec.ServiceInstIRes{
+			Code: common.ErrCodeNoService,
+		})
+		return
+	}
+	var srvInstIds []string
+	srvManager.services.Range(func(srvInstId string, srv service.Service) bool {
+		if srv.IsStopped() {
+			return true
+		}
+		srvInstIds = append(srvInstIds, srvInstId)
+		return true
+	})
+	session.SendMessage(tcodec.ServiceInstIRes{
+		ServiceName:    iReq.ServiceName,
+		ServiceInstArr: srvInstIds,
+	})
 }
 
 // newLocalListener
@@ -153,17 +195,21 @@ type localListener struct {
 }
 
 func (listener *localListener) handleMessage(session session.Session, msg any) {
-	switch res := msg.(type) {
+	switch tMsg := msg.(type) {
 	case *tcodec.MessageSRes:
-		listener.handleMessageRes(res)
+		listener.handleMessageRes(tMsg)
 	case *tcodec.MessageRouter:
-		listener.handleMessageRouter(session, res)
+		listener.handleMessageRouter(session, tMsg)
+	case *tcodec.BroadcastSRes:
+		listener.handleBroadcastRes(tMsg)
 	case *tcodec.RegisterSRes:
-		listener.handleRegisterRes(res)
+		listener.handleRegisterRes(tMsg)
 	case *tcodec.UnregisterSRes:
-		listener.handleUnregisterRes(res)
+		listener.handleUnregisterRes(tMsg)
 	case *tcodec.HeartbeatSRes:
 	case *tcodec.HandshakeRes:
+	case *tcodec.ServiceInstIReq:
+		listener.handleServiceInstIReq(session, tMsg)
 	case *tcodec.SegmentMsg:
 	default:
 		plog.Error("unknown message type:", pfield.String("msgType", reflect.TypeOf(msg).String()))
@@ -205,21 +251,25 @@ func (listener *remoteListener) OnClosed(session session.Session) {
 }
 
 func (listener *remoteListener) handleMessage(session session.Session, msg any) {
-	switch res := msg.(type) {
+	switch tMsg := msg.(type) {
 	case *tcodec.MessageSRes:
-		listener.handleMessageRes(res)
+		listener.handleMessageRes(tMsg)
 	case *tcodec.MessageRouter:
-		listener.handleMessageRouter(session, res)
+		listener.handleMessageRouter(session, tMsg)
+	case *tcodec.BroadcastSRes:
+		listener.handleBroadcastRes(tMsg)
 	case *tcodec.RegisterSRes:
-		listener.handleRegisterRes(res)
+		listener.handleRegisterRes(tMsg)
 	case *tcodec.UnregisterSRes:
-		listener.handleUnregisterRes(res)
+		listener.handleUnregisterRes(tMsg)
 	case *tcodec.HeartbeatSRes:
-		listener.handleHeartbeatRes(res)
+		listener.handleHeartbeatRes(tMsg)
 	case *tcodec.HandshakeRes:
-		listener.handleHandshakeRes(res)
+		listener.handleHandshakeRes(tMsg)
+	case *tcodec.ServiceInstIReq:
+		listener.handleServiceInstIReq(session, tMsg)
 	case *tcodec.SegmentMsg:
-		listener.handleSegmentMsg(session, res)
+		listener.handleSegmentMsg(session, tMsg)
 	default:
 		plog.Error("unknown message type:", pfield.String("msgType", reflect.TypeOf(msg).String()))
 	}

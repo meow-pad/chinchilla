@@ -15,7 +15,7 @@ type WeightSelector struct {
 	weights []int
 }
 
-func (selector *WeightSelector) Select(routerId uint64) (string, error) {
+func (selector *WeightSelector) Select(routerId string) (string, error) {
 	instLen := len(selector.infoArr)
 	if instLen <= 0 {
 		return "", common.ErrEmptyInstances

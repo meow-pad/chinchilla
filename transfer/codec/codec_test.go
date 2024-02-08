@@ -25,6 +25,8 @@ func TestCodec_Req(t *testing.T) {
 		AuthKey:   "12345",
 		Service:   "test",
 		ServiceId: "123",
+		ConnIds:   []uint64{123, 456},
+		RouterIds: []string{"123", "456"},
 	}
 	registerSReq := &RegisterSReq{
 		ConnId:  12345,
@@ -41,7 +43,11 @@ func TestCodec_Req(t *testing.T) {
 		ConnId:  12345,
 		Payload: []byte{1, 2, 3, 4, 5},
 	}
-	messages := []any{segmentMsg, handshakeReq, registerSReq, unregisterReq, heartbeatSReq, messageSReq}
+	srvInstIRes := &ServiceInstIRes{
+		ServiceName:    "123",
+		ServiceInstArr: []string{"123", "456"},
+	}
+	messages := []any{segmentMsg, handshakeReq, registerSReq, unregisterReq, heartbeatSReq, messageSReq, srvInstIRes}
 	cCodec := ClientCodec{byteOrder: binary.BigEndian}
 	sCodec := ServerCodec{byteOrder: binary.BigEndian}
 	for _, msg := range messages {
@@ -70,7 +76,7 @@ func TestCodec_Res(t *testing.T) {
 	registerSRes := &RegisterSRes{
 		ConnId:   12345,
 		Code:     123,
-		RouterId: 12345,
+		RouterId: "12345",
 		Payload:  []byte{1, 2, 3, 4, 5},
 	}
 	unregisterSRes := &UnregisterSRes{
@@ -84,13 +90,21 @@ func TestCodec_Res(t *testing.T) {
 		ConnId:  12345,
 		Payload: []byte{1, 2, 3, 4, 5},
 	}
+	broadcastSRes := &BroadcastSRes{
+		ConnIds: []uint64{123, 456, 789},
+		Payload: []byte{1, 2, 3, 4, 5, 6},
+	}
 	messageRouter := &MessageRouter{
-		RouterType: -123,
-		RouterId:   "abc",
-		Payload:    []byte{1, 2, 3, 4, 5},
+		RouterService: "456",
+		RouterType:    -123,
+		RouterId:      "abc",
+		Payload:       []byte{1, 2, 3, 4, 5},
+	}
+	serviceInstIReq := &ServiceInstIReq{
+		ServiceName: "654",
 	}
 	messages := []any{segmentMsg, handshakeRes, registerSRes, unregisterSRes,
-		heartbeatSRes, messageSRes, messageRouter}
+		heartbeatSRes, messageSRes, broadcastSRes, messageRouter, serviceInstIReq}
 	cCodec := ClientCodec{byteOrder: binary.BigEndian}
 	sCodec := ServerCodec{byteOrder: binary.BigEndian}
 	for _, msg := range messages {

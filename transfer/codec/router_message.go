@@ -39,16 +39,17 @@ func NewRpcRRes(rpcId uint32, payload []byte) *RpcRRes {
 	}
 }
 
-func NewMessageRouter(byteOrder binary.ByteOrder,
+func NewMessageRouter(byteOrder binary.ByteOrder, routerService string,
 	routerType int16, routerId string, routerMessage any) (*MessageRouter, error) {
 	payload, err := encodeRouterMessage(byteOrder, routerMessage)
 	if err != nil {
 		return nil, err
 	}
 	return &MessageRouter{
-		RouterType: routerType,
-		RouterId:   routerId,
-		Payload:    payload,
+		RouterService: routerService,
+		RouterType:    routerType,
+		RouterId:      routerId,
+		Payload:       payload,
 	}, nil
 }
 
