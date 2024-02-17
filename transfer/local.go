@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"github.com/meow-pad/chinchilla/handler"
+	"github.com/meow-pad/chinchilla/transfer/codec"
 	"github.com/meow-pad/chinchilla/transfer/common"
 	"github.com/meow-pad/chinchilla/transfer/service"
 	"github.com/meow-pad/persian/errdef"
@@ -51,12 +52,12 @@ func (sess *localServerSession) IsClosed() bool {
 }
 
 func (sess *localServerSession) SendMessage(message any) {
-	sess.listener.handleMessage(sess, message)
+	sess.listener.handleMessage(sess.clientSess, message)
 }
 
 func (sess *localServerSession) SendMessages(messages ...any) {
 	for _, msg := range messages {
-		sess.listener.handleMessage(sess, msg)
+		sess.listener.handleMessage(sess.clientSess, msg)
 	}
 }
 
@@ -121,6 +122,7 @@ type Local struct {
 	manager       *Manager
 	info          common.Info
 	serverSession session.Session // 这里比较特殊，它是模拟服务接收端的网关会话（非网关内部的服务的会话），这与网关内其他会话概念相反
+	serverCodec   *codec.ServerCodec
 	handler       handler.MessageHandler
 
 	stopped atomic.Bool
@@ -130,6 +132,9 @@ func (local *Local) init(manager *Manager, info common.Info) error {
 	options := manager.transfer.Options
 	if manager == nil || options.LocalMessageHandler == nil {
 		return errdef.ErrInvalidParams
+	}
+	if options.LocalServerCodec == nil {
+		return fmt.Errorf("less local server codec ")
 	}
 	if options.LocalContextBuilder == nil {
 		return fmt.Errorf("less local serverSession context builder")
@@ -146,6 +151,7 @@ func (local *Local) init(manager *Manager, info common.Info) error {
 	local.manager = manager
 	local.info = info
 	local.serverSession = sess
+	local.serverCodec = options.LocalServerCodec
 	local.handler = msgHandler
 	return nil
 }
@@ -174,6 +180,20 @@ func (local *Local) SendMessage(msg any) error {
 		return service.ErrDisabledService
 	}
 	return local.handler.HandleMessage(local.serverSession, msg)
+}
+
+func (local *Local) TransferMessage(msgBytes []byte) error {
+	if local.stopped.Load() {
+		return service.ErrStoppedInstance
+	}
+	if !local.info.Enable {
+		return service.ErrDisabledService
+	}
+	if msg, err := local.serverCodec.Decode(msgBytes); err != nil {
+		return err
+	} else {
+		return local.handler.HandleMessage(local.serverSession, msg)
+	}
 }
 
 func (local *Local) IsEnable() bool {

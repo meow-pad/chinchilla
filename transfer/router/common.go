@@ -24,16 +24,16 @@ func (router *CommonRouter) Route(
 			if srv.IsStopped() {
 				return true
 			}
-			if err := srv.SendMessage(msg); err != nil {
-				plog.Error("send message error:", pfield.Error(err))
+			if err := srv.TransferMessage(msg); err != nil {
+				plog.Error("transfer message error:", pfield.Error(err))
 			}
 			return true
 		})
 	case RouteTypeService:
 		srv := router.GetOpenService(services, routerId)
 		if srv != nil {
-			if err := srv.SendMessage(msg); err != nil {
-				plog.Error("send message error:", pfield.Error(err))
+			if err := srv.TransferMessage(msg); err != nil {
+				plog.Error("transfer message error:", pfield.Error(err))
 			}
 		}
 	default:

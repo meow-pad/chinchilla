@@ -170,7 +170,7 @@ func (listener *listener) handleServiceInstIReq(session session.Session, iReq *t
 		srvInstIds = append(srvInstIds, srvInstId)
 		return true
 	})
-	session.SendMessage(tcodec.ServiceInstIRes{
+	session.SendMessage(&tcodec.ServiceInstIRes{
 		ServiceName:    iReq.ServiceName,
 		ServiceInstArr: srvInstIds,
 	})

@@ -12,6 +12,7 @@ import (
 	"github.com/meow-pad/persian/frame/plog/pfield"
 	"github.com/meow-pad/persian/frame/pnet/tcp/client"
 	tcodec "github.com/meow-pad/persian/frame/pnet/tcp/codec"
+	"github.com/meow-pad/persian/frame/pnet/tcp/session"
 	"github.com/meow-pad/persian/utils/json"
 	"math"
 	"sync/atomic"
@@ -325,6 +326,20 @@ func (remoteSrv *Remote) SendMessage(msg any) error {
 		return err
 	}
 	remoteSrv.inner.SendMessage(msg)
+	return nil
+}
+
+func (remoteSrv *Remote) TransferMessage(msg []byte) error {
+	if err := remoteSrv.checkAlive(); err != nil {
+		return err
+	}
+	remoteSrv.inner.AsyncWrite(msg, func(c session.Conn, err error) error {
+		if err != nil {
+			plog.Error("write message error:", pfield.Error(err))
+			return nil
+		}
+		return nil
+	})
 	return nil
 }
 

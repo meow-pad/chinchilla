@@ -3,6 +3,7 @@ package option
 import (
 	"encoding/binary"
 	"github.com/meow-pad/chinchilla/handler"
+	"github.com/meow-pad/chinchilla/transfer/codec"
 	"github.com/meow-pad/chinchilla/transfer/router"
 	"github.com/meow-pad/chinchilla/transfer/selector"
 	"github.com/meow-pad/persian/frame/pnet/tcp/session"
@@ -116,8 +117,10 @@ type Options struct {
 	GoroutinePool *gopool.GoroutinePool // setting
 	// 关注的服务名
 	RegistryServiceNames []string // setting
-	// 本地会话上下文
-	LocalContextBuilder func(session.Session) (session.Context, error)
+	// 本地消息编解码器
+	LocalServerCodec *codec.ServerCodec
+	// 本地会话上下文构建器
+	LocalContextBuilder func(session.Session) (session.Context, error) // setting
 	// 本地服务消息处理器
 	LocalMessageHandler map[string]handler.MessageHandler // setting
 	// 服务选择器
@@ -290,6 +293,12 @@ func WithGoroutinePool(value *gopool.GoroutinePool) Option {
 func WithRegistryServiceNames(value []string) Option {
 	return func(options *Options) {
 		options.RegistryServiceNames = value
+	}
+}
+
+func WithLocalServerCodec(value *codec.ServerCodec) Option {
+	return func(options *Options) {
+		options.LocalServerCodec = value
 	}
 }
 

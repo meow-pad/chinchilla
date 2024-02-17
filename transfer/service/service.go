@@ -38,6 +38,13 @@ type Service interface {
 	//
 	SendMessage(msg any) error
 
+	// TransferMessage
+	//  @Description: 传输消息字节数组
+	//  @param msg
+	//  @return error
+	//
+	TransferMessage(msg []byte) error
+
 	// IsEnable
 	//  @Description: 服务是否处于可用状态
 	//  @return bool
