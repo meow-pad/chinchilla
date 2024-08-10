@@ -29,12 +29,14 @@ func (selector *WeightSelector) Select(routerId string) (string, error) {
 }
 
 func (selector *WeightSelector) Update(infoArr []common.Info) {
+	sInfoArr := make([]common.Info, len(infoArr))
 	weights := make([]int, len(infoArr))
 	sum := 0
 	for i, inst := range infoArr {
 		sum += int(inst.Weight)
 		weights[i] = sum
 	}
-	copy(selector.infoArr, infoArr)
+	copy(sInfoArr, infoArr)
+	selector.infoArr = sInfoArr
 	selector.weights = weights
 }

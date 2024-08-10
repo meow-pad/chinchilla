@@ -6,6 +6,8 @@ import (
 	"errors"
 	"fmt"
 	"github.com/meow-pad/chinchilla/utils/codec"
+	"github.com/meow-pad/persian/frame/plog"
+	"github.com/meow-pad/persian/frame/plog/pfield"
 	"io"
 	"reflect"
 )
@@ -69,6 +71,7 @@ func (sCodec *ServerCodec) Encode(msg any) ([]byte, error) {
 		copy(left, sMsg.Payload)
 		return buf, nil
 	case *UnregisterSRes:
+		plog.Debug("encode UnregisterSRes", pfield.Uint64("connId", sMsg.ConnId), pfield.Stack("stack"))
 		buf := make([]byte, 8+1)
 		buf[0] = TypeUnregisterS
 		left := buf[1:]
@@ -78,6 +81,7 @@ func (sCodec *ServerCodec) Encode(msg any) ([]byte, error) {
 		}
 		return buf, nil
 	case *HeartbeatSRes:
+		//plog.Debug("encode HeartbeatSRes", pfield.Uint64("connId", sMsg.ConnId), pfield.Stack("stack"))
 		buf := make([]byte, len(sMsg.Payload)+8+1)
 		buf[0] = TypeHeartbeatS
 		sCodec.byteOrder.PutUint64(buf[1:], sMsg.ConnId)

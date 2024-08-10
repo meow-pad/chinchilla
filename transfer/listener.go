@@ -25,22 +25,36 @@ func (listener *listener) OnClosed(session session.Session) {
 }
 
 func (listener *listener) OnReceive(session session.Session, msg any, msgLen int) (err error) {
+	if plog.LoggerLevel() == plog.DebugLevel {
+		plog.Debug("(transfer) receive message:", pfield.String("msgType", reflect.TypeOf(msg).String()), pfield.JsonString("msg", msg))
+	}
 	listener.handleMessage(session, msg)
 	return
 }
 
 func (listener *listener) OnReceiveMulti(session session.Session, msgArr []any, totalLen int) (err error) {
 	for _, msg := range msgArr {
+		if plog.LoggerLevel() == plog.DebugLevel {
+			plog.Debug("(transfer) receive message:", pfield.String("msgType", reflect.TypeOf(msg).String()), pfield.JsonString("msg", msg))
+		}
 		listener.handleMessage(session, msg)
 	}
 	return
 }
 
 func (listener *listener) OnSend(session session.Session, msg any, msgLen int) (err error) {
+	if plog.LoggerLevel() == plog.DebugLevel {
+		plog.Debug("(transfer) send message:", pfield.String("msgType", reflect.TypeOf(msg).String()), pfield.JsonString("msg", msg))
+	}
 	return nil
 }
 
-func (listener *listener) OnSendMulti(session session.Session, msg []any, totalLen int) (err error) {
+func (listener *listener) OnSendMulti(session session.Session, msgArr []any, totalLen int) (err error) {
+	for _, msg := range msgArr {
+		if plog.LoggerLevel() == plog.DebugLevel {
+			plog.Debug("(transfer) send message:", pfield.String("msgType", reflect.TypeOf(msg).String()), pfield.JsonString("msg", msg))
+		}
+	}
 	return nil
 }
 
@@ -60,6 +74,7 @@ func getSessionFromGoLocal(local *worker.GoroutineLocal, connId uint64) session.
 
 func (listener *listener) handleMessageRes(res *tcodec.MessageSRes) {
 	listener.manager.transfer.Forward(int64(res.ConnId), func(local *worker.GoroutineLocal) {
+		plog.Debug("(transfer) forward MessageSRes", pfield.Uint64("conn", res.ConnId))
 		sess := getSessionFromGoLocal(local, res.ConnId)
 		if sess == nil {
 			return
@@ -73,6 +88,7 @@ func (listener *listener) handleMessageRes(res *tcodec.MessageSRes) {
 func (listener *listener) handleBroadcastRes(res *tcodec.BroadcastSRes) {
 	for _, connId := range res.ConnIds {
 		listener.manager.transfer.Forward(int64(connId), func(local *worker.GoroutineLocal) {
+			plog.Debug("(transfer) forward BroadcastSRes", pfield.Uint64("conn", connId))
 			sess := getSessionFromGoLocal(local, connId)
 			if sess == nil {
 				return
@@ -86,6 +102,7 @@ func (listener *listener) handleBroadcastRes(res *tcodec.BroadcastSRes) {
 
 func (listener *listener) handleRegisterRes(res *tcodec.RegisterSRes) {
 	listener.manager.transfer.Forward(int64(res.ConnId), func(local *worker.GoroutineLocal) {
+		plog.Debug("(transfer) forward RegisterSRes", pfield.Uint64("conn", res.ConnId))
 		sess := getSessionFromGoLocal(local, res.ConnId)
 		if sess == nil {
 			return
@@ -111,6 +128,7 @@ func (listener *listener) handleRegisterRes(res *tcodec.RegisterSRes) {
 
 func (listener *listener) handleUnregisterRes(res *tcodec.UnregisterSRes) {
 	listener.manager.transfer.Forward(int64(res.ConnId), func(local *worker.GoroutineLocal) {
+		plog.Debug("(transfer) forward UnregisterSRes", pfield.Uint64("conn", res.ConnId))
 		sess := getSessionFromGoLocal(local, res.ConnId)
 		if sess == nil {
 			return
@@ -124,9 +142,25 @@ func (listener *listener) handleUnregisterRes(res *tcodec.UnregisterSRes) {
 	})
 }
 
+func (listener *listener) handleHeartbeatRes(res *tcodec.HeartbeatSRes) {
+	plog.Debug("(transfer) handleHeartbeatRes", pfield.Uint64("connId", res.ConnId))
+	listener.manager.transfer.Forward(int64(res.ConnId), func(local *worker.GoroutineLocal) {
+		sess := getSessionFromGoLocal(local, res.ConnId)
+		if sess == nil {
+			return
+		}
+		plog.Debug("(transfer) send HeartbeatRes", pfield.Uint64("connId", res.ConnId))
+		rRes := &rcodec.HeartbeatRes{}
+		rRes.Payload = res.Payload
+		sess.SendMessage(rRes)
+	})
+}
+
 func (listener *listener) handleMessageRouter(session session.Session, res *tcodec.MessageRouter) {
 	// 注意，这里提交到池子，会导致消息处理顺序变得无序，有要求时需要修改
 	err := listener.manager.transfer.GoPool.Submit(func() {
+		plog.Debug("router message:", pfield.Int16("routerType", res.RouterType),
+			pfield.String("routerId", res.RouterId))
 		var err any
 		defer func() {
 			if err == nil {
@@ -134,6 +168,7 @@ func (listener *listener) handleMessageRouter(session session.Session, res *tcod
 			}
 			if err != nil {
 				plog.Error("route message error:",
+					pfield.String("routerService", res.RouterService),
 					pfield.Int16("routerType", res.RouterType),
 					pfield.String("routerId", res.RouterId),
 					pfield.Any("error", err))
@@ -148,6 +183,7 @@ func (listener *listener) handleMessageRouter(session session.Session, res *tcod
 	})
 	if err != nil {
 		plog.Error("submit router task error:",
+			pfield.String("routerService", res.RouterService),
 			pfield.Int16("routerType", res.RouterType),
 			pfield.String("routerId", res.RouterId),
 			pfield.Error(err))
@@ -207,6 +243,7 @@ func (listener *localListener) handleMessage(session session.Session, msg any) {
 	case *tcodec.UnregisterSRes:
 		listener.handleUnregisterRes(tMsg)
 	case *tcodec.HeartbeatSRes:
+		listener.handleHeartbeatRes(tMsg)
 	case *tcodec.HandshakeRes:
 	case *tcodec.ServiceInstIReq:
 		listener.handleServiceInstIReq(session, tMsg)
@@ -273,10 +310,6 @@ func (listener *remoteListener) handleMessage(session session.Session, msg any) 
 	default:
 		plog.Error("unknown message type:", pfield.String("msgType", reflect.TypeOf(msg).String()))
 	}
-}
-
-func (listener *remoteListener) handleHeartbeatRes(res *tcodec.HeartbeatSRes) {
-	// nothing
 }
 
 func (listener *remoteListener) handleHandshakeRes(res *tcodec.HandshakeRes) {

@@ -6,6 +6,8 @@ import (
 	"errors"
 	"fmt"
 	"github.com/meow-pad/chinchilla/utils/codec"
+	"github.com/meow-pad/persian/frame/plog"
+	"github.com/meow-pad/persian/frame/plog/pfield"
 	"io"
 	"reflect"
 )
@@ -166,6 +168,7 @@ func (cCodec *ClientCodec) Decode(in []byte) (any, error) {
 		if res.ConnId, left, err = codec.ReadUint64(cCodec.byteOrder, left); err != nil {
 			return nil, err
 		}
+		plog.Debug("decode UnregisterSRes", pfield.Uint64("connId", res.ConnId), pfield.Stack("stack"))
 		return res, nil
 	case TypeHeartbeatS:
 		res := &HeartbeatSRes{}
@@ -175,6 +178,7 @@ func (cCodec *ClientCodec) Decode(in []byte) (any, error) {
 			return nil, err
 		}
 		res.Payload = bytes.Clone(left)
+		//plog.Debug("decode HeartbeatSRes", pfield.Uint64("connId", res.ConnId), pfield.Stack("stack"))
 		return res, nil
 	case TypeHandshake:
 		res := &HandshakeRes{}

@@ -8,6 +8,7 @@ import (
 	"github.com/meow-pad/persian/frame/pnet/tcp/session"
 	"github.com/meow-pad/persian/utils/coding"
 	"github.com/meow-pad/persian/utils/worker"
+	"reflect"
 )
 
 func NewListener(server *Receiver) *Listener {
@@ -21,40 +22,48 @@ type Listener struct {
 func (listener *Listener) OnOpened(sess session.Session) {
 	sessCtx := newSessionContext(listener.server, sess)
 	if err := sess.Register(sessCtx); err != nil {
-		plog.Error("register sess context error:", pfield.Error(err))
+		plog.Error("(receiver) register sess context error:", pfield.Error(err))
 		if cErr := sess.Close(); cErr != nil {
 			plog.Error("close session error:", pfield.Error(cErr))
 		}
 	} else {
+		plog.Debug("(receiver) open session", pfield.Uint64("sessionId", sess.Id()))
 		listener.server.Transfer.Forward(int64(sess.Id()), func(local *worker.GoroutineLocal) {
 			local.Set(sess.Id(), sess)
 		})
 	}
 }
 
-func (listener *Listener) OnClosed(session session.Session) {
-	listener.server.Transfer.Forward(int64(session.Id()), func(local *worker.GoroutineLocal) {
+func (listener *Listener) OnClosed(sess session.Session) {
+	plog.Info("(receiver) close session", pfield.Uint64("sessionId", sess.Id()))
+	listener.server.Transfer.Forward(int64(sess.Id()), func(local *worker.GoroutineLocal) {
 		// 移除缓存
-		local.Remove(session.Id())
+		local.Remove(sess.Id())
 	})
 }
 
 func (listener *Listener) OnReceive(sess session.Session, msg any, msgLen int) (err error) {
-	plog.Debug("receive message:", pfield.JsonString("msg", msg))
+	if plog.LoggerLevel() == plog.DebugLevel {
+		plog.Debug("(receiver) receive message:", pfield.String("msgType", reflect.TypeOf(msg).String()), pfield.JsonString("msg", msg))
+	}
 	listener.handleMessage(sess, msg)
 	return nil
 }
 
 func (listener *Listener) OnReceiveMulti(sess session.Session, msgArr []any, totalLen int) (err error) {
 	for _, msg := range msgArr {
-		plog.Debug("(chinchilla) receive message:", pfield.JsonString("msg", msg))
+		if plog.LoggerLevel() == plog.DebugLevel {
+			plog.Debug("(receiver) receive message:", pfield.String("msgType", reflect.TypeOf(msg).String()), pfield.JsonString("msg", msg))
+		}
 		listener.handleMessage(sess, msg)
 	}
 	return
 }
 
 func (listener *Listener) OnSend(sess session.Session, msg any, msgLen int) (err error) {
-	plog.Debug("(chinchilla) send message:", pfield.JsonString("msg", msg))
+	if plog.LoggerLevel() == plog.DebugLevel {
+		plog.Debug("(receiver) send message:", pfield.String("msgType", reflect.TypeOf(msg).String()), pfield.JsonString("msg", msg))
+	}
 	return
 }
 
@@ -96,23 +105,28 @@ func (listener *Listener) handleMessageReq(sess session.Session, req *codec.Mess
 		if srvService.IsStopped() {
 			// 服务停止了？
 			if cErr := sess.Close(); cErr != nil {
-				plog.Error("close session error:", pfield.Error(cErr))
+				plog.Error("(receiver) close session error:", pfield.Error(cErr))
 			}
 			return
 		}
 		if sessCtx.IsRegistered() {
+			plog.Debug("(receiver) send MessageSReq to service",
+				pfield.Uint64("sessId", sessCtx.Id()), pfield.String("service", reqService))
 			if err := srvService.SendMessage(&tcodec.MessageSReq{
 				ConnId:  sess.Id(),
 				Payload: req.Payload,
 			}); err != nil {
-				plog.Error("send message to service error:", pfield.Error(err))
+				plog.Error("(receiver) send message to service error:", pfield.Error(err))
 			}
 		} else {
+			// 先对会话进行注册
+			plog.Debug("(receiver) register to service",
+				pfield.Uint64("sessId", sessCtx.Id()), pfield.String("service", reqService))
 			if err := srvService.SendMessage(&tcodec.RegisterSReq{
 				ConnId:  sess.Id(),
 				Payload: req.Payload,
 			}); err != nil {
-				plog.Error("send message to service error:", pfield.Error(err))
+				plog.Error("(receiver) send message to service error:", pfield.Error(err))
 			}
 			return
 		}
@@ -124,7 +138,7 @@ func (listener *Listener) handleHeartbeatReq(sess session.Session, req *codec.He
 		sessCtx := coding.Cast[*SenderContext](sess.Context())
 		if sessCtx == nil {
 			if cErr := sess.Close(); cErr != nil {
-				plog.Error("close session error:", pfield.Error(cErr))
+				plog.Error("(receiver) close session error:", pfield.Error(cErr))
 			}
 			return
 		}
@@ -139,19 +153,24 @@ func (listener *Listener) handleHeartbeatReq(sess session.Session, req *codec.He
 			if dfService.IsStopped() {
 				// 服务停止了？
 				if cErr := sess.Close(); cErr != nil {
-					plog.Error("close session error:", pfield.Error(cErr))
+					plog.Error("(receiver) close session error:", pfield.Error(cErr))
 				}
 				return
 			}
 			// 更新过期时间
 			sessCtx.UpdateDeadline()
 			// 转发消息
+			plog.Debug("(receiver) handle HeartbeatSReq", pfield.Uint64("sessId", sessCtx.Id()))
 			if err := dfService.SendMessage(&tcodec.HeartbeatSReq{
 				ConnId:  sess.Id(),
 				Payload: req.Payload,
 			}); err != nil {
-				plog.Error("send message to service error:", pfield.Error(err))
+				plog.Error("(receiver) send message to service error:", pfield.Error(err))
 			}
+			//// 这里尝试先发
+			//res := &codec.HeartbeatRes{}
+			//sess.SendMessage(res)
+			return
 		} else {
 			res := &codec.HeartbeatRes{}
 			res.Code = codec.ErrCodeLoginFirst
@@ -181,7 +200,7 @@ func (listener *Listener) handleHandshakeReq(sess session.Session, req *codec.Ha
 		sessCtx := coding.Cast[*SenderContext](sess.Context())
 		if sessCtx == nil {
 			if cErr := sess.Close(); cErr != nil {
-				plog.Error("close session error:", pfield.Error(cErr))
+				plog.Error("(receiver) close session error:", pfield.Error(cErr))
 			}
 			return
 		}
@@ -223,7 +242,7 @@ func (listener *Listener) handleHandshakeReq(sess session.Session, req *codec.Ha
 				sess.SendMessage(res)
 			})
 			if sErr != nil {
-				plog.Error("submit SelectInstance task in HandshakeReq error:", pfield.Error(sErr))
+				plog.Error("(receiver) submit SelectInstance task in HandshakeReq error:", pfield.Error(sErr))
 			}
 			return
 		}
