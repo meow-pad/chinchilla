@@ -107,7 +107,7 @@ func (sCodec *ServerCodec) Encode(msg any) ([]byte, error) {
 		// 这些消息不可能在server端编码
 		return nil, errors.New("unsupported message in server encoder:" + reflect.TypeOf(msg).String())
 	default:
-		return nil, errors.New("invalid message type:" + reflect.TypeOf(msg).String())
+		return nil, errors.New("(transfer server) encode invalid message type:" + reflect.TypeOf(msg).String())
 	}
 }
 
@@ -198,6 +198,6 @@ func (sCodec *ServerCodec) Decode(in []byte) (any, error) {
 		// 这些消息不可能在server端解码
 		return nil, fmt.Errorf("unsupported message in server decoder:%d", msgType)
 	default:
-		return nil, errors.New("invalid message type")
+		return nil, errors.New("(transfer server) decode invalid message type")
 	}
 }

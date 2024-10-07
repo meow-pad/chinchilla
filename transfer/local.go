@@ -129,8 +129,11 @@ type Local struct {
 }
 
 func (local *Local) init(manager *Manager, info common.Info) error {
+	if manager == nil {
+		return errdef.ErrInvalidParams
+	}
 	options := manager.transfer.Options
-	if manager == nil || options.LocalMessageHandler == nil {
+	if options.LocalMessageHandler == nil {
 		return errdef.ErrInvalidParams
 	}
 	if options.LocalServerCodec == nil {

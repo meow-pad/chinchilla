@@ -100,12 +100,18 @@ func (manager *Manager) addService(info common.Info) error {
 	if len(srvId) <= 0 {
 		return fmt.Errorf("less metadata service id:%v", info)
 	}
+	plog.Debug("add service:",
+		pfield.String("serviceName", info.ServiceName),
+		pfield.String("serviceId", srvId))
 	if curInstId == srvId {
 		if srv, err := NewLocalService(manager, info); err != nil {
 			return err
 		} else {
 			manager.services.Store(srvId, srv)
 		}
+		plog.Debug("add local service:",
+			pfield.String("serviceName", info.ServiceName),
+			pfield.String("serviceId", srvId))
 	} else {
 		srv, err := NewRemoteService(manager, info)
 		if err != nil {
@@ -115,8 +121,13 @@ func (manager *Manager) addService(info common.Info) error {
 		// 尝试连接
 		err = srv.Connect()
 		if err != nil {
-			plog.Error("connect to service error:", pfield.Error(err))
+			plog.Error("connect to remote service error:",
+				pfield.String("serviceName", info.ServiceName),
+				pfield.Error(err))
 		}
+		plog.Debug("add remote service:",
+			pfield.String("serviceName", info.ServiceName),
+			pfield.String("serviceId", srvId))
 	}
 	return nil
 }

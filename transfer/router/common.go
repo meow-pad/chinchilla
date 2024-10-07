@@ -35,6 +35,8 @@ func (router *CommonRouter) Route(
 			if err := srv.TransferMessage(msg); err != nil {
 				plog.Error("transfer message error:", pfield.Error(err))
 			}
+		} else {
+			plog.Debug("unknown router service", pfield.String("serviceId", routerId))
 		}
 	default:
 		plog.Warn("unknown router type", pfield.Int16("routerType", routerType))
@@ -45,6 +47,9 @@ func (router *CommonRouter) Route(
 func (router *CommonRouter) GetOpenService(
 	services *collections.SyncMap[string, service.Service], instId string) service.Service {
 	srv, _ := services.Load(instId)
+	if srv == nil {
+		return nil
+	}
 	if srv.IsStopped() {
 		return nil
 	}

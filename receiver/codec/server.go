@@ -22,7 +22,7 @@ func (sCodec *ServerCodec) Encode(msg any) ([]byte, error) {
 		}
 		return buf, nil
 	default:
-		return nil, errors.New("invalid message type:" + reflect.TypeOf(msg).String())
+		return nil, errors.New("(receiver server) invalid message type:" + reflect.TypeOf(msg).String())
 	}
 }
 

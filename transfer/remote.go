@@ -28,7 +28,7 @@ const (
 )
 
 var (
-	ErrConnectClientFirst   = errors.New("Connect client first")
+	ErrConnectClientFirst   = errors.New("connect client first")
 	ErrConnectingClient     = errors.New("client is connecting")
 	ErrNotConnected         = errors.New("not in connected state")
 	ErrFrequentReconnection = errors.New("reconnection is too frequent")
@@ -102,6 +102,7 @@ func (remoteSrv *Remote) UpdateInfo(srvInst common.Info) error {
 		if !remoteSrv.info.Enable {
 			remoteSrv.state.Store(StateDisabled)
 			remoteSrv.deadline = time.Now().UnixMilli() + remoteSrv.manager.transfer.Options.TransferClientDisableTimeout
+			plog.Debug("disable transfer client:", pfield.String("serviceId", remoteSrv.info.ServiceId()))
 		} else {
 			if !remoteSrv.info.Healthy {
 				remoteSrv.state.Store(StateDisabled)
@@ -112,7 +113,7 @@ func (remoteSrv *Remote) UpdateInfo(srvInst common.Info) error {
 					remoteSrv.deadline = math.MaxInt64
 					// 尝试连接
 					if err := remoteSrv.Connect(); err != nil {
-						plog.Error("Connect error:", pfield.Error(err))
+						plog.Error("transfer client connect error:", pfield.Error(err))
 					}
 				} // end of if
 			} // end of else
@@ -138,7 +139,8 @@ func (remoteSrv *Remote) disable() error {
 	default:
 		remoteSrv.info.Enable = false
 		if state != StateDisabled || remoteSrv.deadline == math.MaxInt64 {
-			remoteSrv.deadline = time.Now().UnixMilli() + remoteSrv.manager.transfer.Options.TransferClientDisableTimeout
+			remoteSrv.deadline = time.Now().UnixMilli() +
+				remoteSrv.manager.transfer.Options.TransferClientDisableTimeout
 		}
 		remoteSrv.state.Store(StateDisabled)
 	}
@@ -192,7 +194,7 @@ func (remoteSrv *Remote) Connect() error {
 		client.WithSocketSendBuffer(options.TransferClientSocketSendBuffer),
 	}
 	tClient, err := client.NewClient(remoteSrv.codec, newRemoteListener(remoteSrv), clientOpts...)
-	if err == nil {
+	if err != nil {
 		return err
 	}
 	remoteSrv.dialCtx, remoteSrv.dialCancel = context.WithTimeout(context.Background(), options.TransferClientDialTimeout)
@@ -209,9 +211,12 @@ func (remoteSrv *Remote) Connect() error {
 //	@receiver sClient
 //	@param tClient
 func (remoteSrv *Remote) _connect(tClient *client.Client) {
-	err := tClient.Dial(remoteSrv.dialCtx, fmt.Sprintf("%s:%d", remoteSrv.info.Ip, remoteSrv.info.Port))
+	address := fmt.Sprintf("%s:%d", remoteSrv.info.Ip, remoteSrv.info.Port)
+	plog.Debug("transfer client try connecting", pfield.String("address", address))
+	err := tClient.Dial(remoteSrv.dialCtx, address)
 	if err != nil {
-		plog.Error("client Connect error:", pfield.Error(err))
+		plog.Error("transfer client Connect error:",
+			pfield.String("address", address), pfield.Error(err))
 	}
 	remoteSrv.inner = tClient
 	// 重置重连间隔
@@ -221,7 +226,7 @@ func (remoteSrv *Remote) _connect(tClient *client.Client) {
 		remoteSrv.dialCtx, remoteSrv.dialCancel = nil, nil
 	}
 	if !remoteSrv.state.CompareAndSwap(StateConnecting, StateConnected) {
-		plog.Error("cant change state to StateConnected", pfield.Int32("curState", remoteSrv.state.Load()))
+		plog.Error("transfer client cant change state to StateConnected", pfield.Int32("curState", remoteSrv.state.Load()))
 	}
 }
 
@@ -239,14 +244,14 @@ func (remoteSrv *Remote) handshake() {
 	remoteSrv.inner.SendMessage(&codec.HandshakeReq{
 		Id:        appInfo.Id(), // 当前服务Id
 		AuthKey:   options.TransferServiceAuthKey,
-		Service:   remoteSrv.info.ServiceName, // 对方服务名
+		Service:   remoteSrv.info.Service(),   // 对方服务名
 		ServiceId: remoteSrv.info.ServiceId(), // 对方实例Id
 	})
 }
 
 func (remoteSrv *Remote) onHandshake() {
 	remoteSrv.certified.CompareAndSwap(false, true)
-	plog.Debug("on handshake", pfield.Any("info", remoteSrv.info))
+	plog.Debug("(transfer client) on handshake", pfield.Any("info", remoteSrv.info))
 }
 
 // KeepAlive

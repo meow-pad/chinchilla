@@ -68,7 +68,10 @@ func (registry *Registry) init() error {
 func (registry *Registry) Start(ctx context.Context) error {
 	options := registry.options
 	for _, srvName := range options.RegistryServiceNames {
-		if err := registry.SubscribeService(srvName); err != nil {
+		if err := registry.initService(srvName); err != nil {
+			return err
+		}
+		if err := registry.subscribeService(srvName); err != nil {
 			return err
 		}
 	}
@@ -88,20 +91,48 @@ func (registry *Registry) Stop(ctx context.Context) error {
 	return nil
 }
 
-// SubscribeService
+// initService
+//
+//	@Description: 初始化服务当前所有实例
+//	@receiver registry
+//	@param srv
+//	@return error
+func (registry *Registry) initService(srv string) error {
+	if _, ok := registry.services.Load(srv); ok {
+		return nil
+	}
+	params := vo.GetServiceParam{
+		//Clusters:    []string{registry.appInfo.Cluster()},
+		ServiceName: srv,
+		GroupName:   registry.appInfo.NamingGroup(),
+	}
+	srvModel, err := registry.naming.GetService(params)
+	if err != nil {
+		return err
+	}
+	cluster := registry.appInfo.Cluster()
+	cInstances := make([]model.Instance, 0, len(srvModel.Hosts))
+	for _, inst := range srvModel.Hosts {
+		if inst.ClusterName == cluster {
+			cInstances = append(cInstances, inst)
+		}
+	}
+	plog.Debug("init services:", pfield.JsonString("instances", cInstances))
+	registry.transfer.UpdateInstances(srv, cInstances)
+	return nil
+}
+
+// subscribeService
 //
 //	@Description: 订阅服务
 //	@receiver manager
 //	@param srv
 //	@return error
-func (registry *Registry) SubscribeService(srv string) error {
-	if _, ok := registry.services.Load(srv); ok {
-		return nil
-	}
+func (registry *Registry) subscribeService(srv string) error {
 	params := &vo.SubscribeParam{
 		//Clusters:    []string{registry.appInfo.Cluster()},
 		ServiceName: srv,
-		GroupName:   registry.appInfo.EnvName(),
+		GroupName:   registry.appInfo.NamingGroup(),
 		SubscribeCallback: func(instances []model.Instance, err error) {
 			cluster := registry.appInfo.Cluster()
 			cInstances := make([]model.Instance, 0, len(instances))
@@ -159,7 +190,7 @@ func (registry *Registry) getService(srv string) (model.Service, error) {
 	return registry.naming.GetService(vo.GetServiceParam{
 		Clusters:    []string{registry.appInfo.Cluster()},
 		ServiceName: srv,
-		GroupName:   registry.appInfo.EnvName(),
+		GroupName:   registry.appInfo.NamingGroup(),
 	})
 }
 
@@ -174,7 +205,7 @@ func (registry *Registry) selectInstances(srv string) ([]model.Instance, error) 
 	return registry.naming.SelectInstances(vo.SelectInstancesParam{
 		Clusters:    []string{registry.appInfo.Cluster()},
 		ServiceName: srv,
-		GroupName:   registry.appInfo.EnvName(),
+		GroupName:   registry.appInfo.NamingGroup(),
 		HealthyOnly: true,
 	})
 }
@@ -191,6 +222,6 @@ func (registry *Registry) selectOneHealthInstance(srv string) (*model.Instance, 
 	return registry.naming.SelectOneHealthyInstance(vo.SelectOneHealthInstanceParam{
 		Clusters:    []string{registry.appInfo.Cluster()},
 		ServiceName: srv,
-		GroupName:   registry.appInfo.EnvName(),
+		GroupName:   registry.appInfo.NamingGroup(),
 	})
 }

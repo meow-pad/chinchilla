@@ -81,7 +81,7 @@ func encodeRouterMessage(byteOrder binary.ByteOrder, msg any) (buf []byte, err e
 		copy(left, req.Payload)
 		return
 	default:
-		err = errors.New("unknown router message type:" + reflect.TypeOf(msg).String())
+		err = errors.New("(transfer) encode invalid router message type:" + reflect.TypeOf(msg).String())
 		return
 	}
 }
@@ -117,6 +117,6 @@ func decodeRouterMessage(byteOrder binary.ByteOrder, in []byte) (any, error) {
 		res.Payload = bytes.Clone(left)
 		return res, nil
 	default:
-		return nil, fmt.Errorf("invalid message type:%d", msgType)
+		return nil, fmt.Errorf("(transfer) decode invalid router message type:%d", msgType)
 	}
 }

@@ -102,7 +102,7 @@ func (cCodec *ClientCodec) Encode(msg any) ([]byte, error) {
 		// 这些消息不可能在client端编码
 		return nil, errors.New("unsupported message in client encoder:" + reflect.TypeOf(msg).String())
 	default:
-		return nil, errors.New("invalid message type:" + reflect.TypeOf(msg).String())
+		return nil, errors.New("(transfer client) encode invalid message type:" + reflect.TypeOf(msg).String())
 	}
 }
 
@@ -202,6 +202,6 @@ func (cCodec *ClientCodec) Decode(in []byte) (any, error) {
 		// 这些消息不可能在client端解码
 		return nil, fmt.Errorf("unsupported message in client decoder:%d", msgType)
 	default:
-		return nil, errors.New("invalid message type")
+		return nil, errors.New("(transfer client) decode invalid message type")
 	}
 }
