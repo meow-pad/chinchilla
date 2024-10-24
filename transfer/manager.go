@@ -86,6 +86,10 @@ func (manager *Manager) UpdateInstances(instArr []model.Instance) {
 	})
 	manager.srvInfoArr = srvInfoArr
 	manager.transfer.selector.Update(manager.srvInfoArr)
+	plog.Debug("update service instances:",
+		pfield.Any("input", instArr),
+		pfield.Any("output", manager.srvInfoArr),
+	)
 }
 
 // addService
@@ -153,7 +157,7 @@ func (manager *Manager) KeepClientsAlive() {
 //	@return Service
 //	@return error
 func (manager *Manager) SelectInstance(routerId string) (service.Service, error) {
-	defer coding.CachePanicError("select service instance error", nil,
+	defer coding.CatchPanicError("select service instance error", nil,
 		pfield.String("routerId", routerId))
 	instId, err := manager.transfer.selector.Select(routerId)
 	if err != nil && !errors.Is(err, common.ErrEmptyInstances) {

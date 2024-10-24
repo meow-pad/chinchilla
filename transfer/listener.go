@@ -43,9 +43,13 @@ func (listener *listener) OnReceiveMulti(session session.Session, msgArr []any, 
 	return
 }
 
-func (listener *listener) OnSend(session session.Session, msg any, msgLen int) (err error) {
+func (listener *listener) OnSend(sess session.Session, msg any, msgLen int) (err error) {
 	if plog.LoggerLevel() == plog.DebugLevel {
-		plog.Debug("(transfer) client send message:", pfield.String("msgType", reflect.TypeOf(msg).String()), pfield.JsonString("msg", msg))
+		plog.Debug("(transfer) client send message:",
+			pfield.String("msgType", reflect.TypeOf(msg).String()),
+			pfield.JsonString("msg", msg),
+			pfield.String("connAddress", sess.Connection().RemoteAddr().String()),
+		)
 	}
 	return nil
 }

@@ -25,7 +25,9 @@ func (router *CommonRouter) Route(
 				return true
 			}
 			if err := srv.TransferMessage(msg); err != nil {
-				plog.Error("transfer message error:", pfield.Error(err))
+				plog.Error("transfer message error:",
+					pfield.String("serviceId", srv.Info().ServiceId()),
+					pfield.Error(err))
 			}
 			return true
 		})

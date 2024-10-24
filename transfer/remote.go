@@ -15,6 +15,7 @@ import (
 	"github.com/meow-pad/persian/frame/pnet/tcp/session"
 	"github.com/meow-pad/persian/utils/json"
 	"math"
+	"sync"
 	"sync/atomic"
 	"time"
 )
@@ -36,7 +37,7 @@ var (
 )
 
 var (
-	reconnectInterval = []int64{1000, 2000, 4000, 8000, 10_000}
+	reconnectInterval = []int64{2000, 2000, 4000, 8000, 10_000}
 )
 
 func NewRemoteService(manager *Manager, srvInfo common.Info) (*Remote, error) {
@@ -47,19 +48,128 @@ func NewRemoteService(manager *Manager, srvInfo common.Info) (*Remote, error) {
 	return remote, nil
 }
 
-// Remote 远程服务实例
-type Remote struct {
-	manager    *Manager
-	codec      tcodec.Codec
-	inner      *client.Client
-	info       common.Info
-	state      atomic.Int32
-	certified  atomic.Bool
+func newConnectContext(onConnect func() error,
+	onConnected func(tClient *client.Client, err error), onCancelConnect func()) *connectContext {
+	return &connectContext{
+		onConnect:       onConnect,
+		onConnected:     onConnected,
+		onCancelConnect: onCancelConnect,
+	}
+}
+
+type connectContext struct {
+	dialLock   sync.Mutex
 	dialCtx    context.Context
 	dialCancel context.CancelFunc
 	// 最近连接时间，以便使用退避算法
 	lastConnect  atomic.Int64
-	reconnectLvl int
+	reconnectLvl atomic.Int32
+	// 连接触发函数
+	onConnect func() error
+	// 连接完成函数
+	onConnected func(tClient *client.Client, err error)
+	// 取消连接
+	onCancelConnect func()
+}
+
+// getReconnectInterval
+//
+//	@Description:  重连时间间隔
+//	@receiver sClient
+//	@return int64
+func (connCtx *connectContext) getReconnectInterval() int64 {
+	return reconnectInterval[int(connCtx.reconnectLvl.Load())%len(reconnectInterval)]
+}
+
+// canConnect
+//
+//	@Description: 是否能进行连接
+//	@receiver connCtx
+//	@return error 错误信息
+func (connCtx *connectContext) canConnect() error {
+	now := time.Now().UnixMilli()
+	// 连接退避时间间隔
+	if (connCtx.lastConnect.Load() + connCtx.getReconnectInterval()) >= now {
+		return ErrFrequentReconnection
+	}
+	return nil
+}
+
+// beforeConnect
+//
+//	@Description: 连接前准备操作
+func (connCtx *connectContext) beforeConnect() (error, context.Context) {
+	now := time.Now().UnixMilli()
+	connCtx.dialLock.Lock()
+	defer connCtx.dialLock.Unlock()
+	if connCtx.dialCtx != nil {
+		// 之前连接的状态还存在则清理
+		connCtx.dialCancel()
+		connCtx.dialCtx = nil
+		connCtx.dialCancel = nil
+	}
+	connCtx.lastConnect.Store(now)
+	connCtx.reconnectLvl.Add(1)
+	// 获取新的连接状态
+	connCtx.dialCtx, connCtx.dialCancel = context.WithCancel(context.Background())
+	// 触发连接时函数
+	if connCtx.onConnect != nil {
+		if err := connCtx.onConnect(); err != nil {
+			connCtx.dialCancel()
+			connCtx.dialCtx = nil
+			connCtx.dialCancel = nil
+			return err, nil
+		}
+	}
+	return nil, connCtx.dialCtx
+}
+
+// afterConnect
+//
+//	@Description: 连接后续操作
+//	@receiver connCtx
+//	@param err
+func (connCtx *connectContext) afterConnect(tClient *client.Client, err error) {
+	connCtx.dialLock.Lock()
+	defer connCtx.dialLock.Unlock()
+	if connCtx.dialCtx != nil {
+		connCtx.dialCtx = nil
+		connCtx.dialCancel = nil
+	}
+	if err == nil {
+		connCtx.reconnectLvl.Store(0)
+	}
+	if connCtx.onConnected != nil {
+		connCtx.onConnected(tClient, err)
+	}
+}
+
+// cancelConnect
+//
+//	@Description: 取消当前的连接
+//	@receiver connCtx
+func (connCtx *connectContext) cancelConnect() {
+	connCtx.dialLock.Lock()
+	defer connCtx.dialLock.Unlock()
+	if connCtx.dialCancel != nil {
+		connCtx.dialCancel()
+		connCtx.dialCtx, connCtx.dialCancel = nil, nil
+		if connCtx.onCancelConnect != nil {
+			connCtx.onCancelConnect()
+		}
+	}
+}
+
+// Remote 远程服务实例
+type Remote struct {
+	manager   *Manager
+	codec     tcodec.Codec
+	inner     *client.Client
+	info      common.Info
+	state     atomic.Int32
+	certified atomic.Bool
+	// 连接上下文
+	connectCtx *connectContext
 	// 最终关闭时间
 	deadline int64
 	// 分段数据
@@ -82,6 +192,7 @@ func (remoteSrv *Remote) init(manager *Manager, srvInfo common.Info) error {
 		return err
 	}
 	remoteSrv.codec = cCodec
+	remoteSrv.connectCtx = newConnectContext(remoteSrv.onConnect, remoteSrv.onConnected, remoteSrv.onCancelConnect)
 	return nil
 }
 
@@ -147,13 +258,62 @@ func (remoteSrv *Remote) disable() error {
 	return nil
 }
 
-// getReconnectInterval
-//
-//	@Description:  重连时间间隔
-//	@receiver sClient
-//	@return int64
-func (remoteSrv *Remote) getReconnectInterval() int64 {
-	return reconnectInterval[remoteSrv.reconnectLvl%len(reconnectInterval)]
+func (remoteSrv *Remote) canStateConnecting(state int32) error {
+	switch state {
+	case StateDisabled:
+		return service.ErrDisabledService
+	case StateStopped:
+		return service.ErrStoppedInstance
+	default:
+		return nil
+	}
+}
+
+func (remoteSrv *Remote) onConnect() error {
+	state := remoteSrv.state.Load()
+	if err := remoteSrv.canStateConnecting(state); err != nil {
+		return err
+	}
+	if !remoteSrv.state.CompareAndSwap(state, StateConnecting) {
+		return fmt.Errorf("(transfer client) invalid state:%d", state)
+	}
+	return nil
+}
+
+func (remoteSrv *Remote) onConnected(tClient *client.Client, err error) {
+	cutState := remoteSrv.state.Load()
+	if cutState != StateConnecting {
+		plog.Error("transfer client state is not in connecting on connected",
+			pfield.Int32("curState", cutState))
+		return
+	}
+	if err != nil {
+		// 回滚状态
+		if !remoteSrv.state.CompareAndSwap(StateConnecting, StateInitialized) {
+			plog.Error("transfer client cant change state to StateInitialized on connecting",
+				pfield.Int32("curState", cutState))
+		}
+	} else {
+		remoteSrv.inner = tClient
+		// 进入链接状态
+		if !remoteSrv.state.CompareAndSwap(StateConnecting, StateConnected) {
+			plog.Error("transfer client cant change state to StateConnected on connecting",
+				pfield.Int32("curState", remoteSrv.state.Load()))
+		}
+	}
+}
+
+func (remoteSrv *Remote) onCancelConnect() {
+	cutState := remoteSrv.state.Load()
+	if cutState != StateConnecting {
+		plog.Error("transfer client state is not in connecting on cancel connecting",
+			pfield.Int32("curState", cutState))
+		return
+	}
+	if !remoteSrv.state.CompareAndSwap(StateConnecting, StateInitialized) {
+		plog.Error("transfer client cant change state to StateInitialized on cancel connecting",
+			pfield.Int32("curState", cutState))
+	}
 }
 
 // Connect
@@ -164,25 +324,14 @@ func (remoteSrv *Remote) getReconnectInterval() int64 {
 func (remoteSrv *Remote) Connect() error {
 	// 触发可见性
 	state := remoteSrv.state.Load()
-	switch state {
-	case StateDisabled:
-		return service.ErrDisabledService
-	case StateStopped:
-		return service.ErrStoppedInstance
-	default:
+	if err := remoteSrv.canStateConnecting(state); err != nil {
+		return err
 	}
-	if remoteSrv.dialCtx != nil {
-		// 如果上次连接还没结束则返回
-		return ErrConnectingClient
+
+	if err := remoteSrv.connectCtx.canConnect(); err != nil {
+		return err
 	}
-	// 连接间隔
-	now := time.Now().UnixMilli()
-	if (remoteSrv.lastConnect.Load() + remoteSrv.getReconnectInterval()) >= now {
-		return ErrFrequentReconnection
-	} else {
-		remoteSrv.lastConnect.Store(now)
-		remoteSrv.reconnectLvl++
-	}
+
 	// 创建客户端
 	options := remoteSrv.manager.transfer.Options
 	clientOpts := []client.Option{
@@ -197,11 +346,11 @@ func (remoteSrv *Remote) Connect() error {
 	if err != nil {
 		return err
 	}
-	remoteSrv.dialCtx, remoteSrv.dialCancel = context.WithTimeout(context.Background(), options.TransferClientDialTimeout)
-	if !remoteSrv.state.CompareAndSwap(state, StateConnecting) {
-		return errors.New("invalid state")
+	if bErr, connCtx := remoteSrv.connectCtx.beforeConnect(); bErr != nil {
+		return bErr
+	} else {
+		go remoteSrv._connect(tClient, connCtx)
 	}
-	go remoteSrv._connect(tClient)
 	return nil
 }
 
@@ -210,24 +359,21 @@ func (remoteSrv *Remote) Connect() error {
 //	@Description: 真实连接操作
 //	@receiver sClient
 //	@param tClient
-func (remoteSrv *Remote) _connect(tClient *client.Client) {
+//	@param connCtx
+func (remoteSrv *Remote) _connect(tClient *client.Client, connCtx context.Context) {
 	address := fmt.Sprintf("%s:%d", remoteSrv.info.Ip, remoteSrv.info.Port)
 	plog.Debug("transfer client try connecting", pfield.String("address", address))
-	err := tClient.Dial(remoteSrv.dialCtx, address)
+
+	err := tClient.Dial(connCtx, address)
 	if err != nil {
-		plog.Error("transfer client Connect error:",
-			pfield.String("address", address), pfield.Error(err))
+		plog.Error("transfer client Connect service error:",
+			pfield.String("targetServiceId", remoteSrv.info.ServiceId()),
+			pfield.String("targetAddress", address),
+			pfield.Error(err))
+	} else {
+		plog.Debug("transfer client connected", pfield.String("address", address))
 	}
-	remoteSrv.inner = tClient
-	// 重置重连间隔
-	remoteSrv.reconnectLvl = 0
-	if remoteSrv.dialCancel != nil {
-		remoteSrv.dialCancel()
-		remoteSrv.dialCtx, remoteSrv.dialCancel = nil, nil
-	}
-	if !remoteSrv.state.CompareAndSwap(StateConnecting, StateConnected) {
-		plog.Error("transfer client cant change state to StateConnected", pfield.Int32("curState", remoteSrv.state.Load()))
-	}
+	remoteSrv.connectCtx.afterConnect(tClient, err)
 }
 
 // handshake
@@ -286,7 +432,7 @@ func (remoteSrv *Remote) KeepAlive() bool {
 					remoteSrv.handshake()
 				} else {
 					// 连接正常则发送心跳
-					remoteSrv.inner.SendMessage(codec.HeartbeatSReq{})
+					remoteSrv.inner.SendMessage(&codec.HeartbeatSReq{})
 				}
 			}
 		}
@@ -380,10 +526,8 @@ func (remoteSrv *Remote) Stop(ctx context.Context) error {
 	if state == StateStopped {
 		return service.ErrStoppedInstance
 	}
-	if remoteSrv.dialCancel != nil {
-		remoteSrv.dialCancel()
-		remoteSrv.dialCtx, remoteSrv.dialCancel = nil, nil
-	}
+	// 尝试取消正在进行的连接
+	remoteSrv.connectCtx.cancelConnect()
 	if remoteSrv.inner != nil {
 		if err := remoteSrv.inner.CloseWithContext(ctx); err != nil {
 			plog.Error("close connection error:", pfield.Error(err))

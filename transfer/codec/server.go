@@ -198,6 +198,6 @@ func (sCodec *ServerCodec) Decode(in []byte) (any, error) {
 		// 这些消息不可能在server端解码
 		return nil, fmt.Errorf("unsupported message in server decoder:%d", msgType)
 	default:
-		return nil, errors.New("(transfer server) decode invalid message type")
+		return nil, fmt.Errorf("(transfer server) decode invalid message type:%d", msgType)
 	}
 }
