@@ -7,14 +7,16 @@ import (
 	"fmt"
 	"github.com/meow-pad/chinchilla/transfer/common"
 	"github.com/meow-pad/chinchilla/utils/codec"
+	netcodec "github.com/meow-pad/persian/frame/pnet/tcp/codec"
 	"io"
 	"reflect"
 )
 
 type RpcRReq struct {
-	SourceId string // 源请求服务id
-	RPCId    uint32 // 源请求编号
-	Payload  []byte
+	SourceSrv string // 源请求服务名
+	SourceId  string // 源请求服务id
+	RPCId     uint32 // 源请求编号
+	Payload   []byte
 }
 
 type RpcRRes struct {
@@ -23,11 +25,12 @@ type RpcRRes struct {
 	Payload []byte
 }
 
-func NewRpcRReq(SourceId string, rpcId uint32, payload []byte) *RpcRReq {
+func NewRpcRReq(SourceSrv, SourceId string, rpcId uint32, payload []byte) *RpcRReq {
 	return &RpcRReq{
-		SourceId: SourceId,
-		RPCId:    rpcId,
-		Payload:  payload,
+		SourceSrv: SourceSrv,
+		SourceId:  SourceId,
+		RPCId:     rpcId,
+		Payload:   payload,
 	}
 }
 
@@ -40,8 +43,8 @@ func NewRpcRRes(rpcId uint32, payload []byte) *RpcRRes {
 }
 
 func NewMessageRouter(byteOrder binary.ByteOrder, routerService string,
-	routerType int16, routerId string, routerMessage any) (*MessageRouter, error) {
-	payload, err := encodeRouterMessage(byteOrder, routerMessage)
+	routerType int16, routerId string, msgCodec netcodec.Codec, routerMessage any) (*MessageRouter, error) {
+	payload, err := msgCodec.Encode(routerMessage)
 	if err != nil {
 		return nil, err
 	}
@@ -56,9 +59,13 @@ func NewMessageRouter(byteOrder binary.ByteOrder, routerService string,
 func encodeRouterMessage(byteOrder binary.ByteOrder, msg any) (buf []byte, err error) {
 	switch req := msg.(type) {
 	case *RpcRReq:
-		buf = make([]byte, 1+2+len(req.SourceId)+4+len(req.Payload))
+		buf = make([]byte, 1+2+len(req.SourceSrv)+2+len(req.SourceId)+4+len(req.Payload))
 		buf[0] = TypeRPCRReq
 		left := buf[1:]
+		left, err = codec.WriteString(byteOrder, req.SourceSrv, left)
+		if err != nil {
+			return
+		}
 		left, err = codec.WriteString(byteOrder, req.SourceId, left)
 		if err != nil {
 			return
@@ -96,6 +103,9 @@ func decodeRouterMessage(byteOrder binary.ByteOrder, in []byte) (any, error) {
 		res := &RpcRReq{}
 		left := in[1:]
 		err := error(nil)
+		if res.SourceSrv, left, err = codec.ReadString(byteOrder, left); err != nil {
+			return nil, err
+		}
 		if res.SourceId, left, err = codec.ReadString(byteOrder, left); err != nil {
 			return nil, err
 		}

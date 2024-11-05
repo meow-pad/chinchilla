@@ -4,8 +4,9 @@ go 1.20
 
 require (
 	github.com/gogo/protobuf v1.3.2
-	github.com/meow-pad/persian v0.0.10
+	github.com/meow-pad/persian v0.0.11
 	github.com/nacos-group/nacos-sdk-go/v2 v2.1.1
+	github.com/panjf2000/gnet/v2 v2.3.3
 	github.com/pkg/errors v0.9.1
 	github.com/stretchr/testify v1.8.4
 )
@@ -36,7 +37,6 @@ require (
 	github.com/modern-go/concurrent v0.0.0-20180306012644-bacd9c7ef1dd // indirect
 	github.com/modern-go/reflect2 v1.0.2 // indirect
 	github.com/panjf2000/ants/v2 v2.8.2 // indirect
-	github.com/panjf2000/gnet/v2 v2.3.3 // indirect
 	github.com/pelletier/go-toml v1.9.4 // indirect
 	github.com/pmezard/go-difflib v1.0.0 // indirect
 	github.com/prometheus/client_golang v1.12.2 // indirect
@@ -44,6 +44,7 @@ require (
 	github.com/prometheus/common v0.32.1 // indirect
 	github.com/prometheus/procfs v0.7.3 // indirect
 	github.com/valyala/bytebufferpool v1.0.0 // indirect
+	github.com/valyala/fastrand v1.1.0 // indirect
 	go.uber.org/atomic v1.11.0 // indirect
 	go.uber.org/automaxprocs v1.5.3 // indirect
 	go.uber.org/multierr v1.10.0 // indirect

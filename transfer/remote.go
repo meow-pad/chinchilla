@@ -431,8 +431,8 @@ func (remoteSrv *Remote) KeepAlive() bool {
 				if !remoteSrv.certified.Load() {
 					remoteSrv.handshake()
 				} else {
-					// 连接正常则发送心跳
-					remoteSrv.inner.SendMessage(&codec.HeartbeatSReq{})
+					// 连接正常则发送心跳（这是用户心跳，没必要在这发）
+					//remoteSrv.inner.SendMessage(&codec.HeartbeatSReq{})
 				}
 			}
 		}

@@ -4,13 +4,14 @@ import (
 	"context"
 	"fmt"
 	"github.com/meow-pad/chinchilla/handler"
-	"github.com/meow-pad/chinchilla/transfer/codec"
 	"github.com/meow-pad/chinchilla/transfer/common"
 	"github.com/meow-pad/chinchilla/transfer/service"
 	"github.com/meow-pad/persian/errdef"
 	"github.com/meow-pad/persian/frame/plog"
 	"github.com/meow-pad/persian/frame/plog/pfield"
+	netcodec "github.com/meow-pad/persian/frame/pnet/tcp/codec"
 	"github.com/meow-pad/persian/frame/pnet/tcp/session"
+	"github.com/meow-pad/persian/frame/pnet/utils"
 	"sync/atomic"
 )
 
@@ -122,7 +123,7 @@ type Local struct {
 	manager       *Manager
 	info          common.Info
 	serverSession session.Session // 这里比较特殊，它是模拟服务接收端的网关会话（非网关内部的服务的会话），这与网关内其他会话概念相反
-	serverCodec   *codec.ServerCodec
+	serverCodec   netcodec.Codec
 	handler       handler.MessageHandler
 
 	stopped atomic.Bool
@@ -192,11 +193,17 @@ func (local *Local) TransferMessage(msgBytes []byte) error {
 	if !local.info.Enable {
 		return service.ErrDisabledService
 	}
-	if msg, err := local.serverCodec.Decode(msgBytes); err != nil {
+	reader := utils.NewBytesReader(msgBytes)
+	if msgArr, _, err := local.serverCodec.Decode(reader); err != nil {
 		return err
 	} else {
-		return local.handler.HandleMessage(local.serverSession, msg)
+		for _, msg := range msgArr {
+			if hErr := local.handler.HandleMessage(local.serverSession, msg); hErr != nil {
+				return hErr
+			}
+		} // end of for
 	}
+	return nil
 }
 
 func (local *Local) IsEnable() bool {

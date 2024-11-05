@@ -3,9 +3,9 @@ package option
 import (
 	"encoding/binary"
 	"github.com/meow-pad/chinchilla/handler"
-	"github.com/meow-pad/chinchilla/transfer/codec"
 	"github.com/meow-pad/chinchilla/transfer/router"
 	"github.com/meow-pad/chinchilla/transfer/selector"
+	netcodec "github.com/meow-pad/persian/frame/pnet/tcp/codec"
 	"github.com/meow-pad/persian/frame/pnet/tcp/session"
 	ws "github.com/meow-pad/persian/frame/pnet/ws/server"
 	"github.com/meow-pad/persian/frame/pservice/name"
@@ -118,7 +118,7 @@ type Options struct {
 	// 关注的服务名
 	RegistryServiceNames []string // setting
 	// 本地消息编解码器
-	LocalServerCodec *codec.ServerCodec
+	LocalServerCodec netcodec.Codec
 	// 本地会话上下文构建器
 	LocalContextBuilder func(session.Session) (session.Context, error) // setting
 	// 本地服务消息处理器
@@ -296,7 +296,7 @@ func WithRegistryServiceNames(value []string) Option {
 	}
 }
 
-func WithLocalServerCodec(value *codec.ServerCodec) Option {
+func WithLocalServerCodec(value netcodec.Codec) Option {
 	return func(options *Options) {
 		options.LocalServerCodec = value
 	}

@@ -16,13 +16,11 @@ import (
 func NewGateway(
 	appInfo pboot.AppInfo,
 	secTimer *timewheel.TimeWheel,
-	cache *cache.Cache,
 	options *option.Options,
 ) (*Gateway, error) {
 	gw := &Gateway{
 		appInfo:  appInfo,
 		secTimer: secTimer,
-		cache:    cache,
 		options:  options,
 	}
 	if gw.appInfo == nil {
@@ -31,9 +29,9 @@ func NewGateway(
 	if gw.secTimer == nil {
 		return nil, errors.WithStack(errors.New("nil secTimer"))
 	}
-	if gw.cache == nil {
-		return nil, errors.WithStack(errors.New("nil cache"))
-	}
+	//if gw.cache == nil {
+	//	return nil, errors.WithStack(errors.New("nil cache"))
+	//}
 	if gw.options == nil {
 		return nil, errors.WithStack(errors.New("nil options"))
 	}
@@ -60,7 +58,7 @@ func (gw *Gateway) init() error {
 	}
 	goPool := gopool.NewGoPool(gw.options.GoroutinePool)
 	var err error
-	gw.transfer, err = transfer.NewTransfer(gw.appInfo, gw.secTimer, gw.cache, goPool, gw.options)
+	gw.transfer, err = transfer.NewTransfer(gw.appInfo, gw.secTimer, goPool, gw.options)
 	if err != nil {
 		return err
 	}

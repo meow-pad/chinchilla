@@ -11,7 +11,6 @@ import (
 	"github.com/meow-pad/persian/frame/plog"
 	"github.com/meow-pad/persian/frame/plog/pfield"
 	"github.com/meow-pad/persian/frame/pnet/tcp/session"
-	"github.com/meow-pad/persian/frame/pservice/cache"
 	"github.com/meow-pad/persian/utils/timewheel"
 	"github.com/meow-pad/persian/utils/worker"
 	"github.com/nacos-group/nacos-sdk-go/v2/model"
@@ -20,7 +19,6 @@ import (
 func NewTransfer(
 	appInfo pboot.AppInfo,
 	secTimer *timewheel.TimeWheel,
-	cache *cache.Cache,
 	goPool *gopool.GoPool,
 	options *option.Options,
 ) (*Transfer, error) {
@@ -29,7 +27,6 @@ func NewTransfer(
 		Options:  options,
 		SecTimer: secTimer,
 		GoPool:   goPool,
-		Cache:    cache,
 	}
 	err := transfer.init()
 	if err != nil {
@@ -42,7 +39,6 @@ type Transfer struct {
 	AppInfo  pboot.AppInfo
 	Options  *option.Options
 	SecTimer *timewheel.TimeWheel
-	Cache    *cache.Cache
 	GoPool   *gopool.GoPool
 
 	registry      *Registry

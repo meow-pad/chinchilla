@@ -104,8 +104,9 @@ func (sCodec *ServerCodec) Encode(msg any) ([]byte, error) {
 	case *SegmentMsg:
 		return encodeSegmentMsg(sCodec.byteOrder, sMsg)
 	case *RpcRReq, *RpcRRes:
-		// 这些消息不可能在server端编码
-		return nil, errors.New("unsupported message in server encoder:" + reflect.TypeOf(msg).String())
+		//// 这些消息不可能在server端编码
+		//return nil, errors.New("unsupported message in server encoder:" + reflect.TypeOf(msg).String())
+		return encodeRouterMessage(sCodec.byteOrder, msg)
 	default:
 		return nil, errors.New("(transfer server) encode invalid message type:" + reflect.TypeOf(msg).String())
 	}
