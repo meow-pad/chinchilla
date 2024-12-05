@@ -4,7 +4,7 @@ go 1.20
 
 require (
 	github.com/gogo/protobuf v1.3.2
-	github.com/meow-pad/persian v0.0.12
+	github.com/meow-pad/persian v0.1.0
 	github.com/nacos-group/nacos-sdk-go/v2 v2.1.1
 	github.com/panjf2000/gnet/v2 v2.3.3
 	github.com/pkg/errors v0.9.1
