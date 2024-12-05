@@ -9,6 +9,7 @@ import (
 	"github.com/meow-pad/persian/frame/plog"
 	"github.com/meow-pad/persian/frame/plog/pfield"
 	"github.com/meow-pad/persian/frame/pnet/tcp/session"
+	"github.com/meow-pad/persian/utils/coding"
 	"github.com/meow-pad/persian/utils/worker"
 	"reflect"
 )
@@ -166,11 +167,14 @@ func (listener *listener) handleMessageRouter(session session.Session, res *tcod
 	err := listener.manager.transfer.GoPool.Submit(func() {
 		//plog.Debug("router message:", pfield.Int16("routerType", res.RouterType),
 		//	pfield.String("routerId", res.RouterId))
-		var err any
-		defer func() {
-			if err == nil {
-				err = recover()
-			}
+		defer coding.CatchPanicError("route message error:", func() {},
+			pfield.String("routerService", res.RouterService),
+			pfield.Int16("routerType", res.RouterType),
+			pfield.String("routerId", res.RouterId),
+		)
+		srvManager := listener.manager.transfer.GetServiceManager(res.RouterService)
+		if srvManager != nil {
+			err := srvManager.Route(res.RouterType, res.RouterId, res.Payload)
 			if err != nil {
 				plog.Error("route message error:",
 					pfield.String("routerService", res.RouterService),
@@ -178,10 +182,6 @@ func (listener *listener) handleMessageRouter(session session.Session, res *tcod
 					pfield.String("routerId", res.RouterId),
 					pfield.Any("error", err))
 			}
-		}()
-		srvManager := listener.manager.transfer.GetServiceManager(res.RouterService)
-		if srvManager != nil {
-			err = srvManager.Route(res.RouterType, res.RouterId, res.Payload)
 		} else {
 			plog.Warn("(transfer) unknown router service", pfield.String("routerSrv", res.RouterService))
 		}
@@ -283,7 +283,8 @@ type remoteListener struct {
 func (listener *remoteListener) OnOpened(sess session.Session) {
 	plog.Debug("transfer client session opened:",
 		pfield.Any("remoteAddr", sess.Connection().RemoteAddr().String()))
-	listener.client.handshake()
+	// 放到状态改变时完成，此时client的inner还未初始化
+	// listener.client.handshake()
 }
 
 func (listener *remoteListener) OnClosed(session session.Session) {

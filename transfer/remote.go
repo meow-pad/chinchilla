@@ -220,6 +220,11 @@ func (remoteSrv *Remote) UpdateInfo(srvInst common.Info) error {
 				remoteSrv.deadline = math.MaxInt64
 			} else {
 				if remoteSrv.state.Load() == StateDisabled {
+					plog.Debug("enable transfer client:",
+						pfield.String("srvId", remoteSrv.info.ServiceId()),
+						pfield.String("srvIp", remoteSrv.info.Ip),
+						pfield.Uint64("srvPort", remoteSrv.info.Port),
+					)
 					remoteSrv.state.Store(StateInitialized)
 					remoteSrv.deadline = math.MaxInt64
 					// 尝试连接
@@ -288,6 +293,10 @@ func (remoteSrv *Remote) onConnected(tClient *client.Client, err error) {
 		return
 	}
 	if err != nil {
+		plog.Error("transfer client on connect error:",
+			pfield.String("srvIp", remoteSrv.info.Ip),
+			pfield.Uint64("srvPort", remoteSrv.info.Port),
+			pfield.Error(err))
 		// 回滚状态
 		if !remoteSrv.state.CompareAndSwap(StateConnecting, StateInitialized) {
 			plog.Error("transfer client cant change state to StateInitialized on connecting",
@@ -300,6 +309,8 @@ func (remoteSrv *Remote) onConnected(tClient *client.Client, err error) {
 			plog.Error("transfer client cant change state to StateConnected on connecting",
 				pfield.Int32("curState", remoteSrv.state.Load()))
 		}
+		// 完成握手
+		remoteSrv.handshake()
 	}
 }
 
@@ -310,6 +321,11 @@ func (remoteSrv *Remote) onCancelConnect() {
 			pfield.Int32("curState", cutState))
 		return
 	}
+	plog.Debug("cancel transfer client connecting:",
+		pfield.String("srvId", remoteSrv.info.ServiceId()),
+		pfield.String("srvIp", remoteSrv.info.Ip),
+		pfield.Uint64("srvPort", remoteSrv.info.Port),
+	)
 	if !remoteSrv.state.CompareAndSwap(StateConnecting, StateInitialized) {
 		plog.Error("transfer client cant change state to StateInitialized on cancel connecting",
 			pfield.Int32("curState", cutState))
@@ -363,7 +379,6 @@ func (remoteSrv *Remote) Connect() error {
 func (remoteSrv *Remote) _connect(tClient *client.Client, connCtx context.Context) {
 	address := fmt.Sprintf("%s:%d", remoteSrv.info.Ip, remoteSrv.info.Port)
 	plog.Debug("transfer client try connecting", pfield.String("address", address))
-
 	err := tClient.Dial(connCtx, address)
 	if err != nil {
 		plog.Error("transfer client Connect service error:",
@@ -447,8 +462,8 @@ func (remoteSrv *Remote) KeepAlive() bool {
 //	@return error
 func (remoteSrv *Remote) checkAlive() error {
 	switch remoteSrv.state.Load() {
-	case StateInitialized:
-		return ErrConnectClientFirst
+	//case StateInitialized:
+	//	return ErrConnectClientFirst
 	case StateConnecting:
 		return ErrConnectingClient
 	case StateDisabled:
@@ -457,7 +472,7 @@ func (remoteSrv *Remote) checkAlive() error {
 		return service.ErrStoppedInstance
 	default:
 	}
-	if remoteSrv.inner.IsClosed() {
+	if remoteSrv.inner == nil || remoteSrv.inner.IsClosed() {
 		err := remoteSrv.Connect()
 		if err != nil {
 			return err
