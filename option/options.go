@@ -3,6 +3,7 @@ package option
 import (
 	"encoding/binary"
 	"github.com/meow-pad/chinchilla/handler"
+	"github.com/meow-pad/chinchilla/transfer/common"
 	"github.com/meow-pad/chinchilla/transfer/router"
 	"github.com/meow-pad/chinchilla/transfer/selector"
 	netcodec "github.com/meow-pad/persian/frame/pnet/tcp/codec"
@@ -127,6 +128,8 @@ type Options struct {
 	ServiceSelector selector.Selector // 默认值为cache和wrr的组合
 	// 服务路由
 	ServiceRouter router.Router
+	// 服务实例变化监听
+	ServiceInstListener func(service string, instances []common.Info)
 }
 
 type Option func(*Options)
@@ -323,5 +326,11 @@ func WithServiceSelector(value selector.Selector) Option {
 func WithServiceRouter(value router.Router) Option {
 	return func(options *Options) {
 		options.ServiceRouter = value
+	}
+}
+
+func WithServiceInstListener(listener func(service string, instances []common.Info)) Option {
+	return func(options *Options) {
+		options.ServiceInstListener = listener
 	}
 }

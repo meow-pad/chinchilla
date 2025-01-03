@@ -88,3 +88,11 @@ func (gw *Gateway) Stop(ctx context.Context) error {
 	}
 	return nil
 }
+
+func (gw *Gateway) GetTransfer() *transfer.Transfer {
+	return gw.transfer
+}
+
+func (gw *Gateway) GetReceiver() *receiver.Receiver {
+	return gw.receiver
+}

@@ -86,6 +86,9 @@ func (manager *Manager) UpdateInstances(instArr []model.Instance) {
 	})
 	manager.srvInfoArr = srvInfoArr
 	manager.transfer.selector.Update(manager.srvInfoArr)
+	if manager.transfer.Options.ServiceInstListener != nil {
+		manager.transfer.Options.ServiceInstListener(manager.service, manager.srvInfoArr)
+	}
 	plog.Debug("update service instances:",
 		pfield.Any("input", instArr),
 		pfield.Any("output", manager.srvInfoArr),
