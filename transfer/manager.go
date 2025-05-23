@@ -187,7 +187,7 @@ func (manager *Manager) getOpenService(instId string) (service.Service, error) {
 	}
 	srvObj, _ := manager.services.Load(instId)
 	if srvObj == nil {
-		plog.Warn("cannot find client by instance id")
+		plog.Warn("cannot find client by instance id", pfield.String("instanceId", instId))
 		return nil, nil
 	}
 	client := srvObj.(service.Service)
